@@ -58,7 +58,7 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum ResourceCommand {
-    List(commands::deploy::ServiceListArgs),
+    List,
     Inspect(commands::resource::ResourceInspectArgs),
     Check(commands::resource::ResourceInspectArgs),
 }
@@ -66,7 +66,7 @@ enum ResourceCommand {
 #[derive(Debug, Subcommand)]
 enum ServiceCommand {
     Inspect(commands::deploy::ServiceInspectArgs),
-    List,
+    List(commands::deploy::ServiceListArgs),
     History(commands::deploy::HistoryArgs),
 }
 
