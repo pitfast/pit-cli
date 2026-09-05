@@ -100,16 +100,28 @@ pub async fn deploy(args: DeployArgs) -> Result<()> {
     } else {
         let selector = args.selector.as_deref().unwrap();
         let (reference, digest) = parse_selector(selector)?;
-        let paddock = FilesystemPaddock::new(paddock_root(args.paddock_dir.clone())?);
-        let stored = pull(&paddock, reference.as_ref(), digest.as_ref()).await?;
-        let bytes = paddock.get_blob(&stored.digest).await?;
-        let (artifact_path, manifest_path) = store.install(&stored.manifest, &bytes)?;
-        (
-            stored.digest,
-            artifact_path,
-            manifest_path,
-            reference.map(|value| PaddockRefWire::from(&value)),
-        )
+        if let Some(digest) = &digest
+            && store.contains(digest)
+        {
+            let (_manifest, artifact_path) = store.open(digest)?;
+            (
+                digest.clone(),
+                artifact_path,
+                store.manifest_path(digest),
+                None,
+            )
+        } else {
+            let paddock = FilesystemPaddock::new(paddock_root(args.paddock_dir.clone())?);
+            let stored = pull(&paddock, reference.as_ref(), digest.as_ref()).await?;
+            let bytes = paddock.get_blob(&stored.digest).await?;
+            let (artifact_path, manifest_path) = store.install(&stored.manifest, &bytes)?;
+            (
+                stored.digest,
+                artifact_path,
+                manifest_path,
+                reference.map(|value| PaddockRefWire::from(&value)),
+            )
+        }
     };
     let response: DeploymentView = post_json(
         &args.control_endpoint,
