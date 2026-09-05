@@ -8,5 +8,11 @@ pub fn run() -> Result<()> {
     println!("Architecture: {}", std::env::consts::ARCH);
     println!("Execution lanes: {lanes}");
     println!("Parallelism source: std::thread::available_parallelism()");
+    println!();
+    println!("Runtime ABIs");
+    println!("  wasi-preview1  supported");
+    println!("  wasi-preview2  supported");
+    println!();
+    println!("Canonical ABI: wasi-preview2");
     Ok(())
 }

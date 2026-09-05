@@ -26,11 +26,12 @@ pit run
 ~~~
 
 pit build detects the Cargo project and its binary target, invokes the Rust
-WASI Preview 1 builder, validates the generated module, and writes
+WASI Preview 2 builder by default, validates the generated component, and writes
 .pit/build/<name>.wasm plus .pit/artifact.json. With multiple binaries, select
 one with pit build --bin <name>. Repeated builds reuse a valid artifact when
 the source/build fingerprint is unchanged. Use pit build --force to rebuild.
 Use pit build --debug for a debug profile.
+Use pit build --abi wasi-preview1 for the legacy core-module compatibility path.
 
 ## Runtime commands
 
@@ -46,7 +47,7 @@ pit inspect
 pit clean
 ~~~
 
-run, bench, and system use PitBox's existing local WASI Preview 1 execution,
+run, bench, and system use PitBox's existing local WASI Preview 1 and Preview 2 execution,
 limits, scheduler, telemetry, and benchmark behavior. This CLI does not
 implement Wasmtime, scheduling, or compilation.
 
@@ -59,6 +60,11 @@ override PitFast runtime defaults.
 pit inspect prints and verifies a manifest without executing WASM. pit clean
 removes only .pit/. pit init creates a small pit.toml for an existing Cargo
 project and ensures .pit/ is in .gitignore.
+
+WASI Preview 2 command-style components are the canonical new workload. PitFast
+does not yet support arbitrary WASI HTTP components, custom WIT interfaces, or
+other languages. Managed artifacts are integrity-checked before execution;
+raw `pit run ./custom.wasm` remains available without a manifest.
 
 The current development build uses relative path dependencies on ../pit-box and
 ../pit-crew. They can later be replaced with published or git dependencies.

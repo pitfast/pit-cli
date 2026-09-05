@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Args;
+use pit_artifact::RuntimeAbi;
 use pit_builder_rust::RustBuilder;
 use pit_crew::{BuildProfile, BuildRequest, PitCrew};
 
@@ -18,6 +19,9 @@ pub struct BuildArgs {
     /// Rebuild even when the cached build inputs and artifact are valid.
     #[arg(long)]
     pub force: bool,
+    /// Select the WASI ABI; defaults to pit.toml or wasi-preview2.
+    #[arg(long, value_parser = clap::value_parser!(RuntimeAbi))]
+    pub abi: Option<RuntimeAbi>,
 }
 
 pub async fn run(args: BuildArgs) -> Result<()> {
@@ -33,6 +37,10 @@ pub async fn run(args: BuildArgs) -> Result<()> {
         project_dir: project_dir.clone(),
         bin: args.bin.or(config.build.bin),
         profile,
+        abi: args
+            .abi
+            .or(config.build.abi)
+            .unwrap_or_else(RuntimeAbi::wasi_preview2),
         execution_defaults: defaults,
         force: args.force,
     };

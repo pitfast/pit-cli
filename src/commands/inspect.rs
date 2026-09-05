@@ -38,6 +38,7 @@ pub fn run(args: InspectArgs) -> Result<()> {
     println!();
     println!("Runtime");
     println!("  ABI: {}", manifest.runtime.abi.as_str());
+    println!("  Format: {}", manifest.runtime.format);
     println!("  Entrypoint: {}", manifest.runtime.entrypoint);
     println!();
     println!("Artifact");
@@ -77,7 +78,11 @@ pub fn run(args: InspectArgs) -> Result<()> {
     println!("Integrity");
     let mut failed = false;
     match manifest.verify_artifact(&project_dir) {
-        Ok(_) => println!("  ✓ artifact exists"),
+        Ok(_) => {
+            println!("  ✓ artifact exists");
+            println!("  ✓ SHA-256 matches");
+            println!("  ✓ artifact format matches manifest");
+        }
         Err(error) => {
             println!("  ✗ artifact integrity: {error}");
             failed = true;

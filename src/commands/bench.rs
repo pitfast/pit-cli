@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Args;
-use pit_node::{ExecutionResult, PitNode};
+use pit_node::{ExecutionRequest, ExecutionResult, PitNode, WasmArtifact};
 
 use super::run::{format_duration, load_managed_artifact, resolve_artifact};
 
@@ -14,25 +14,39 @@ pub struct BenchArgs {
 
 pub async fn run(args: BenchArgs) -> Result<()> {
     let project_dir = std::env::current_dir()?;
-    let wasm_file = if args.wasm_file.is_some() {
-        resolve_artifact(&project_dir, args.wasm_file.as_deref()).await?
+    let (wasm_file, entrypoint) = if args.wasm_file.is_some() {
+        (
+            resolve_artifact(&project_dir, args.wasm_file.as_deref()).await?,
+            None,
+        )
     } else {
-        load_managed_artifact(&project_dir)?.1
+        let (manifest, path) = load_managed_artifact(&project_dir)?;
+        (path, Some(manifest.runtime.entrypoint.as_str().to_owned()))
     };
-    benchmark(wasm_file)
+    benchmark(wasm_file, entrypoint)
 }
 
-fn benchmark(wasm_file: PathBuf) -> Result<()> {
+fn benchmark(wasm_file: PathBuf, entrypoint: Option<String>) -> Result<()> {
+    let preparation_started = std::time::Instant::now();
     let node = PitNode::from_file(&wasm_file)?;
+    let preparation = preparation_started.elapsed();
+    let artifact = WasmArtifact::from_path(&wasm_file);
+    let entrypoint = entrypoint.unwrap_or_else(|| node.default_entrypoint().to_owned());
+    let request = ExecutionRequest::new(artifact.clone()).with_entrypoint(entrypoint);
+    let instantiation = node.measure_instantiation(&request)?;
     let levels = benchmark_levels(node.execution_lanes());
 
     println!("PitFast Benchmark");
     println!();
-    println!("Component:");
+    println!("Artifact:");
     println!("  {}", wasm_file.display());
     println!();
     println!("Execution lanes:");
     println!("  {}", node.execution_lanes());
+    println!("Artifact preparation:");
+    println!("  {}", format_duration(preparation));
+    println!("Instantiation:");
+    println!("  {}", format_duration(instantiation));
     println!();
     println!(
         "{:<12} {:>10} {:>14} {:>10} {:>10} {:>10} {:>10} {:>6}",
@@ -40,7 +54,7 @@ fn benchmark(wasm_file: PathBuf) -> Result<()> {
     );
 
     for concurrency in levels {
-        let report = node.run(concurrency)?;
+        let report = node.execute_many(request.clone(), concurrency)?;
         let timing = TimingSummary::from_reports(&report.executions);
         println!(
             "{:<12} {:>10} {:>13.2}/s {:>9} {:>9} {:>9} {:>9} {:>6}",

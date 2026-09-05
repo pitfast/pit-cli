@@ -95,8 +95,7 @@ pub async fn run(args: RunArgs) -> Result<()> {
         });
     let entrypoint = manifest
         .as_ref()
-        .map(|manifest| manifest.runtime.entrypoint.clone())
-        .unwrap_or_else(|| "_start".to_owned());
+        .map(|manifest| manifest.runtime.entrypoint.as_str().to_owned());
     run_artifact(RunOptions {
         wasm_file,
         concurrency: args.concurrency,
@@ -115,7 +114,7 @@ struct RunOptions {
     env: Vec<(String, String)>,
     timeout: Option<Duration>,
     memory: Option<usize>,
-    entrypoint: String,
+    entrypoint: Option<String>,
     guest_args: Vec<String>,
     verbose: bool,
 }
@@ -136,15 +135,15 @@ fn run_artifact(options: RunOptions) -> Result<()> {
     }
 
     let artifact = WasmArtifact::from_path(&wasm_file);
+    let node = PitNode::from_artifact(artifact.clone())?;
     let request = ExecutionRequest::new(artifact.clone())
-        .with_entrypoint(entrypoint)
+        .with_entrypoint(entrypoint.unwrap_or_else(|| node.default_entrypoint().to_owned()))
         .with_args(guest_args)
         .with_env(env)
         .with_limits(ExecutionLimits {
             timeout,
             memory_bytes: memory,
         });
-    let node = PitNode::from_artifact(artifact)?;
     let report = node.execute_many(request, concurrency)?;
 
     if verbose {
@@ -313,7 +312,7 @@ fn print_run_summary(report: &pit_node::NodeRunReport) {
     let timing = TimingSummary::from_reports(&report.executions);
     println!("PitFast Pit Box");
     println!();
-    println!("Component: {}", report.artifact_path.display());
+    println!("Artifact: {}", report.artifact_path.display());
     println!();
     println!("Execution Grid");
     println!("  Lanes: {}", report.execution_lanes);

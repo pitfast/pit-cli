@@ -17,7 +17,7 @@ enum Command {
     Build(commands::build::BuildArgs),
     /// Initialize PitFast project configuration and ignore generated output.
     Init,
-    /// Run a WASI Preview 1 artifact through PitBox.
+    /// Run a WASI Preview 1 or Preview 2 artifact through PitBox.
     Run(commands::run::RunArgs),
     /// Run a local concurrency benchmark through PitBox.
     Bench(commands::bench::BenchArgs),

@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use pit_artifact::ExecutionDefaults;
+use pit_artifact::{ExecutionDefaults, RuntimeAbi};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -23,6 +23,7 @@ pub struct ProjectSection {
 #[serde(default)]
 pub struct BuildSection {
     pub bin: Option<String>,
+    pub abi: Option<RuntimeAbi>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -78,7 +79,7 @@ pub fn init(project_dir: &Path) -> Result<bool> {
         fs::write(
             &config,
             format!(
-                "[project]\nname = \"{name}\"\n\n[build]\n# bin = \"binary-name\"\n\n[execution]\n# timeout = \"2s\"\n# memory = \"64MiB\"\n"
+                "[project]\nname = \"{name}\"\n\n[build]\nabi = \"wasi-preview2\"\n# bin = \"binary-name\"\n\n[execution]\n# timeout = \"2s\"\n# memory = \"64MiB\"\n"
             ),
         )?;
         true
@@ -144,6 +145,7 @@ fn parse_memory_bytes(value: &str) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::{ProjectConfig, execution_defaults, init, load};
+    use pit_artifact::RuntimeAbi;
     use std::fs;
 
     #[test]
@@ -157,6 +159,10 @@ mod tests {
         assert_eq!(
             config.project.name.as_deref(),
             Some(project.file_name().unwrap().to_str().unwrap())
+        );
+        assert_eq!(
+            config.build.abi.as_ref().map(RuntimeAbi::as_str),
+            Some("wasi-preview2")
         );
         assert!(project.join(".gitignore").exists());
         let _ = fs::remove_dir_all(project);
