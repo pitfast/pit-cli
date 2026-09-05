@@ -1,12 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use pit_artifact::ArtifactManifest;
-use pit_paddock_core::{
-    ArtifactDigest, PaddockBackend, PaddockRef, pull as pull_artifact, push as push_artifact,
-};
-use pit_paddock_fs::FilesystemPaddock;
+use pit_paddock_core::{ArtifactDigest, PaddockRef, pull as pull_artifact, push as push_artifact};
+use pit_paddock_factory::PaddockConfig;
 
 #[derive(Debug, Args)]
 pub struct PushArgs {
@@ -15,6 +13,8 @@ pub struct PushArgs {
     /// Filesystem Paddock root. Defaults to the platform data directory.
     #[arg(long)]
     pub paddock_dir: Option<PathBuf>,
+    #[arg(long)]
+    pub paddock: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -24,12 +24,16 @@ pub struct PullArgs {
     /// Filesystem Paddock root. Defaults to the platform data directory.
     #[arg(long)]
     pub paddock_dir: Option<PathBuf>,
+    #[arg(long)]
+    pub paddock: Option<String>,
 }
 
 #[derive(Debug, Args)]
 pub struct ListArgs {
     #[arg(long)]
     pub paddock_dir: Option<PathBuf>,
+    #[arg(long)]
+    pub paddock: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -37,6 +41,8 @@ pub struct InspectArgs {
     pub reference: String,
     #[arg(long)]
     pub paddock_dir: Option<PathBuf>,
+    #[arg(long)]
+    pub paddock: Option<String>,
 }
 
 pub async fn push(args: PushArgs) -> Result<()> {
@@ -46,8 +52,8 @@ pub async fn push(args: PushArgs) -> Result<()> {
     let manifest = ArtifactManifest::load(&manifest_path)?;
     let artifact_path = manifest.verify_artifact(&project)?;
     let bytes = tokio::fs::read(&artifact_path).await?;
-    let paddock = FilesystemPaddock::new(paddock_root(args.paddock_dir)?);
-    let (stored, blob) = push_artifact(&paddock, &reference, manifest, &bytes).await?;
+    let paddock = open_paddock(args.paddock.as_deref(), args.paddock_dir)?;
+    let (stored, blob) = push_artifact(&*paddock, &reference, manifest, &bytes).await?;
     println!("Paddock");
     println!();
     println!("Artifact: {}", stored.manifest.artifact.name);
@@ -71,9 +77,9 @@ pub async fn push(args: PushArgs) -> Result<()> {
 }
 
 pub async fn pull(args: PullArgs) -> Result<()> {
-    let paddock = FilesystemPaddock::new(paddock_root(args.paddock_dir)?);
+    let paddock = open_paddock(args.paddock.as_deref(), args.paddock_dir)?;
     let (reference, digest) = parse_locator(&args.artifact)?;
-    let stored = pull_artifact(&paddock, reference.as_ref(), digest.as_ref()).await?;
+    let stored = pull_artifact(&*paddock, reference.as_ref(), digest.as_ref()).await?;
     let project = std::env::current_dir()?;
     let cache = project
         .join(".pit/cache/sha256")
@@ -93,7 +99,7 @@ pub async fn pull(args: PullArgs) -> Result<()> {
 }
 
 pub async fn list(args: ListArgs) -> Result<()> {
-    let paddock = FilesystemPaddock::new(paddock_root(args.paddock_dir)?);
+    let paddock = open_paddock(args.paddock.as_deref(), args.paddock_dir)?;
     let refs = paddock.list_refs(None).await?;
     if refs.is_empty() {
         println!("No Paddock refs found.");
@@ -109,8 +115,8 @@ pub async fn list(args: ListArgs) -> Result<()> {
 
 pub async fn inspect(args: InspectArgs) -> Result<()> {
     let reference: PaddockRef = args.reference.parse()?;
-    let paddock = FilesystemPaddock::new(paddock_root(args.paddock_dir)?);
-    let stored = pull_artifact(&paddock, Some(&reference), None).await?;
+    let paddock = open_paddock(args.paddock.as_deref(), args.paddock_dir)?;
+    let stored = pull_artifact(&*paddock, Some(&reference), None).await?;
     println!("Reference");
     println!("  {}", reference);
     println!();
@@ -144,20 +150,13 @@ fn parse_locator(value: &str) -> Result<(Option<PaddockRef>, Option<ArtifactDige
     }
 }
 
-fn paddock_root(explicit: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(path) = explicit {
-        return Ok(path);
-    }
-    if let Some(path) = std::env::var_os("PIT_PADDOCK_ROOT") {
-        return Ok(path.into());
-    }
-    if let Some(path) = std::env::var_os("XDG_DATA_HOME") {
-        return Ok(PathBuf::from(path).join("pit/paddock"));
-    }
-    if let Some(path) = std::env::var_os("HOME") {
-        return Ok(PathBuf::from(path).join(".local/share/pit/paddock"));
-    }
-    bail!("unable to determine Paddock root; pass --paddock-dir")
+fn open_paddock(
+    name: Option<&str>,
+    explicit_dir: Option<PathBuf>,
+) -> Result<pit_paddock_factory::PaddockHandle> {
+    let config = PaddockConfig::load(&std::env::current_dir()?)?;
+    let name = name.unwrap_or(config.default_name());
+    config.open(name, explicit_dir)
 }
 
 async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {

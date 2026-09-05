@@ -4,11 +4,12 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::Args;
 use pit_artifact::ArtifactManifest;
 use pit_deployment::{
-    DeployRequest, DeploymentView, LocalArtifactStore, RollbackRequest, UndeployRequest,
+    ArtifactAcquirer, DeployRequest, DeploymentStageDurations, DeploymentView, LocalArtifactStore,
+    RollbackRequest, UndeployRequest,
 };
 use pit_lane_core::ServiceId;
-use pit_paddock_core::{ArtifactDigest, PaddockBackend, PaddockRef, PaddockRefWire, pull};
-use pit_paddock_fs::FilesystemPaddock;
+use pit_paddock_core::{ArtifactDigest, PaddockRef, PaddockRefWire};
+use pit_paddock_factory::PaddockConfig;
 use reqwest::Client;
 
 #[derive(Debug, Args)]
@@ -21,6 +22,9 @@ pub struct DeployArgs {
     pub local: bool,
     #[arg(long)]
     pub paddock_dir: Option<PathBuf>,
+    /// Named Paddock from pit.toml or user configuration.
+    #[arg(long)]
+    pub paddock: Option<String>,
     #[arg(long)]
     pub artifact_store: Option<PathBuf>,
     #[arg(long, default_value = "http://127.0.0.1:7081")]
@@ -42,6 +46,11 @@ pub struct RollbackArgs {
     pub control_endpoint: String,
     #[arg(long)]
     pub artifact_store: Option<PathBuf>,
+    /// Named Paddock used to reacquire a historical digest.
+    #[arg(long)]
+    pub paddock: Option<String>,
+    #[arg(long)]
+    pub paddock_dir: Option<PathBuf>,
     #[arg(long)]
     pub expected_generation: Option<u64>,
     #[arg(long)]
@@ -88,41 +97,70 @@ pub async fn deploy(args: DeployArgs) -> Result<()> {
         Some(path) => path,
         None => LocalArtifactStore::default_root()?,
     });
-    let (digest, artifact_path, manifest_path, source_ref) = if args.local {
-        let project = std::env::current_dir()?;
-        let manifest_path = project.join(".pit/artifact.json");
-        let manifest = ArtifactManifest::load(&manifest_path)?;
-        let artifact_path = manifest.verify_artifact(&project)?;
-        let bytes = tokio::fs::read(&artifact_path).await?;
-        let (artifact_path, manifest_path) = store.install(&manifest, &bytes)?;
-        let digest: ArtifactDigest = format!("sha256:{}", manifest.artifact.sha256).parse()?;
-        (digest, artifact_path, manifest_path, None)
+    let project = std::env::current_dir()?;
+    let paddock_config = PaddockConfig::load(&project)?;
+    let paddock_name = args
+        .paddock
+        .clone()
+        .unwrap_or_else(|| paddock_config.default_name().to_owned());
+    let initial_generation = if args.force || args.expected_generation.is_some() {
+        None
     } else {
-        let selector = args.selector.as_deref().unwrap();
-        let (reference, digest) = parse_selector(selector)?;
-        if let Some(digest) = &digest
-            && store.contains(digest)
-        {
-            let (_manifest, artifact_path) = store.open(digest)?;
-            (
-                digest.clone(),
-                artifact_path,
-                store.manifest_path(digest),
-                None,
-            )
-        } else {
-            let paddock = FilesystemPaddock::new(paddock_root(args.paddock_dir.clone())?);
-            let stored = pull(&paddock, reference.as_ref(), digest.as_ref()).await?;
-            let bytes = paddock.get_blob(&stored.digest).await?;
-            let (artifact_path, manifest_path) = store.install(&stored.manifest, &bytes)?;
-            (
-                stored.digest,
-                artifact_path,
-                manifest_path,
-                reference.map(|value| PaddockRefWire::from(&value)),
-            )
-        }
+        Some(current_generation(&args.control_endpoint, &service).await?)
     };
+    let mut ref_resolution_ms = 0;
+    let (digest, artifact_path, manifest_path, source_ref, source_paddock, acquisition) =
+        if args.local {
+            let manifest_path = project.join(".pit/artifact.json");
+            let manifest = ArtifactManifest::load(&manifest_path)?;
+            let artifact_path = manifest.verify_artifact(&project)?;
+            let bytes = tokio::fs::read(&artifact_path).await?;
+            let (artifact_path, manifest_path) = store.install(&manifest, &bytes)?;
+            let digest: ArtifactDigest = format!("sha256:{}", manifest.artifact.sha256).parse()?;
+            (digest, artifact_path, manifest_path, None, None, None)
+        } else {
+            let selector = args.selector.as_deref().unwrap();
+            let (reference, digest) = parse_selector(selector)?;
+            if let Some(digest) = &digest
+                && let Ok((_manifest, artifact_path)) = store.open(digest)
+            {
+                (
+                    digest.clone(),
+                    artifact_path,
+                    store.manifest_path(digest),
+                    None,
+                    args.paddock.clone(),
+                    None,
+                )
+            } else {
+                let paddock = paddock_config.open(&paddock_name, args.paddock_dir.clone())?;
+                let resolve_started = std::time::Instant::now();
+                let resolved = match (&reference, digest) {
+                    (Some(reference), None) => paddock.resolve_ref(reference).await?,
+                    (None, Some(digest)) => digest,
+                    _ => bail!("provide exactly one artifact selector"),
+                };
+                ref_resolution_ms = resolve_started.elapsed().as_millis();
+                let acquired = ArtifactAcquirer::default()
+                    .ensure_local(&resolved, &paddock_name, &*paddock, &store)
+                    .await?;
+                (
+                    resolved,
+                    acquired.artifact_path.clone(),
+                    acquired.manifest_path.clone(),
+                    reference.map(|value| PaddockRefWire::from(&value)),
+                    Some(paddock_name.clone()),
+                    Some(acquired),
+                )
+            }
+        };
+    let acquisition_timings = acquisition.as_ref().map(|value| DeploymentStageDurations {
+        ref_resolution_ms,
+        artifact_acquisition_ms: value.duration.as_millis(),
+        artifact_validation_ms: value.validation_duration.as_millis(),
+        local_install_ms: value.install_duration.as_millis(),
+        ..DeploymentStageDurations::default()
+    });
     let response: DeploymentView = post_json(
         &args.control_endpoint,
         "/v1/deploy",
@@ -132,18 +170,38 @@ pub async fn deploy(args: DeployArgs) -> Result<()> {
             artifact_path: artifact_path.to_string_lossy().into_owned(),
             manifest_path: manifest_path.to_string_lossy().into_owned(),
             source_ref,
-            source_paddock: Some("local".into()),
-            expected_generation: args.expected_generation,
+            source_paddock,
+            expected_generation: args.expected_generation.or(initial_generation),
             force: args.force,
+            stage_durations: acquisition_timings,
         },
     )
     .await?;
     println!("PitFast Deployment\n");
     println!("Service: {}", service);
+    if let Some(acquisition) = acquisition {
+        if acquisition.cache_hit {
+            println!("✓ Artifact already available locally");
+        } else {
+            println!("✓ Artifact acquired from {}", paddock_name);
+            println!("  {} bytes", acquisition.bytes);
+        }
+    }
     println!("✓ Artifact verified");
     println!("✓ Component prepared");
     println!("✓ Deployment state committed");
     println!("✓ Service activated");
+    if let Some(timing) = response.timings {
+        println!("\nTiming");
+        println!("  Resolve:    {} ms", timing.ref_resolution_ms);
+        println!("  Acquire:    {} ms", timing.artifact_acquisition_ms);
+        println!("  Validate:   {} ms", timing.artifact_validation_ms);
+        println!("  Install:    {} ms", timing.local_install_ms);
+        println!("  Prepare:    {} ms", timing.artifact_preparation_ms);
+        println!("  Commit:     {} ms", timing.state_commit_ms);
+        println!("  Activate:   {} ms", timing.registry_activation_ms);
+        println!("  Total:      {} ms", timing.total_ms);
+    }
     println!(
         "\n{}\ngeneration {}\n{}",
         service, response.state.generation, digest
@@ -155,20 +213,75 @@ pub async fn rollback(args: RollbackArgs) -> Result<()> {
     if args.generation.is_some() && args.to.is_some() {
         bail!("use only one of --generation or --to")
     }
-    let target_digest = args.to.map(|value| value.parse()).transpose()?;
+    let service: ServiceId = args.service.parse()?;
+    let current: DeploymentView =
+        get_json(&args.control_endpoint, &format!("/v1/services/{service}"))
+            .await
+            .context("failed to read deployment history")?;
+    let target = if let Some(value) = args.to.as_deref() {
+        let digest: ArtifactDigest = value.parse()?;
+        current
+            .state
+            .history
+            .iter()
+            .find(|revision| revision.digest == digest)
+            .cloned()
+            .ok_or_else(|| anyhow!("digest is not in deployment history"))?
+    } else if let Some(generation) = args.generation {
+        current
+            .state
+            .history
+            .iter()
+            .find(|revision| revision.generation == generation)
+            .cloned()
+            .ok_or_else(|| anyhow!("deployment generation {generation} is not in history"))?
+    } else {
+        current
+            .state
+            .history
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow!("no previous deployment revision exists"))?
+    };
+    let store = LocalArtifactStore::new(match args.artifact_store {
+        Some(path) => path,
+        None => LocalArtifactStore::default_root()?,
+    });
+    if !store.contains(&target.digest) {
+        let config = PaddockConfig::load(&std::env::current_dir()?)?;
+        let name = args
+            .paddock
+            .clone()
+            .or(target.source_paddock.clone())
+            .unwrap_or_else(|| config.default_name().to_owned());
+        let paddock = config.open(&name, args.paddock_dir.clone())?;
+        ArtifactAcquirer::default()
+            .ensure_local(&target.digest, &name, &*paddock, &store)
+            .await
+            .with_context(|| {
+                format!("failed to reacquire historical artifact {}", target.digest)
+            })?;
+    } else {
+        store.open(&target.digest)?;
+    }
+    let target_digest = Some(target.digest.clone());
     let view: DeploymentView = post_json(
         &args.control_endpoint,
         "/v1/rollback",
         &RollbackRequest {
             service_id: args.service,
             target_generation: args.generation,
-            target_digest,
-            expected_generation: args.expected_generation,
+            target_digest: target_digest.clone(),
+            expected_generation: args.expected_generation.or(Some(current.state.generation)),
             force: args.force,
         },
     )
     .await
     .context("rollback failed")?;
+    println!(
+        "✓ Historical artifact {} available",
+        target_digest.as_ref().unwrap()
+    );
     println!("✓ Rollback activated generation {}", view.state.generation);
     if let Some(current) = view.state.current {
         println!("{} → {}", view.state.service_id, current.digest);
@@ -325,18 +438,17 @@ fn parse_selector(value: &str) -> Result<(Option<PaddockRef>, Option<ArtifactDig
     }
 }
 
-fn paddock_root(explicit: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(path) = explicit {
-        return Ok(path);
+async fn current_generation(endpoint: &str, service: &ServiceId) -> Result<u64> {
+    let response = Client::new()
+        .get(format!(
+            "{}/v1/services/{service}",
+            endpoint.trim_end_matches('/')
+        ))
+        .send()
+        .await?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(0);
     }
-    if let Some(path) = std::env::var_os("PIT_PADDOCK_ROOT") {
-        return Ok(path.into());
-    }
-    if let Some(path) = std::env::var_os("XDG_DATA_HOME") {
-        return Ok(PathBuf::from(path).join("pit/paddock"));
-    }
-    if let Some(path) = std::env::var_os("HOME") {
-        return Ok(PathBuf::from(path).join(".local/share/pit/paddock"));
-    }
-    Err(anyhow!("unable to determine Paddock root"))
+    let view: DeploymentView = parse_response(response).await?;
+    Ok(view.state.generation)
 }

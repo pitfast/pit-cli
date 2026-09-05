@@ -57,6 +57,7 @@ pit pull service-a:v1 --paddock-dir /tmp/pit-paddock
 pit paddock list --paddock-dir /tmp/pit-paddock
 pit paddock inspect service-a:v1 --paddock-dir /tmp/pit-paddock
 pit deploy service-a service-a:v1 --paddock-dir /tmp/pit-paddock
+pit deploy service-a service-a:v1 --paddock origin
 pit deploy service-a sha256:<64-lowercase-hex> --artifact-store /path/to/artifacts
 pit deploy service-a --local
 pit service list
@@ -108,3 +109,30 @@ digest-addressed artifact to PitLane's loopback-only control endpoint
 the live registry. `pit rollback` uses a historical digest directly; it does
 not re-resolve the historical source tag. `pit undeploy` stops new routing but
 keeps state history and artifacts.
+
+Named Paddocks are configured in `pit.toml` (project configuration overrides
+the optional user configuration at `$XDG_CONFIG_HOME/pit/pit.toml`):
+
+```toml
+[paddocks.local]
+provider = "filesystem"
+path = "/tmp/pit-paddock"
+
+[paddocks.origin]
+provider = "s3"
+endpoint = "https://s3.example"
+bucket = "pitfast-artifacts"
+region = "auto"
+access_key_env = "PIT_PADDOCK_ACCESS_KEY"
+secret_key_env = "PIT_PADDOCK_SECRET_KEY"
+
+[deployment]
+default_paddock = "local"
+```
+
+`pit deploy --paddock origin` resolves a ref once, acquires the resulting
+digest into the host LocalArtifactStore, and only then asks PitLane to prepare
+and activate it. A missing digest is fetched by digest for rollback; historical
+tags are never re-resolved. `--paddock-dir` is an explicit filesystem override,
+useful for offline tests. Remote acquisition has a bounded 30-second timeout
+and three attempts. Paddock is never contacted on the request hot path.

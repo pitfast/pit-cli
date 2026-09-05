@@ -21,6 +21,7 @@ pit-lane-core = { path = "../pit-lane/crates/pit-lane-core" }
 pit-deployment = { path = "../pit-lane/crates/pit-deployment" }
 pit-paddock-core = { path = "../pit-paddock/crates/pit-paddock-core" }
 pit-paddock-fs = { path = "../pit-paddock/crates/pit-paddock-fs" }
+pit-paddock-factory = { path = "../pit-paddock/crates/pit-paddock-factory" }
 reqwest = { version = "0.12", default-features = false }
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
