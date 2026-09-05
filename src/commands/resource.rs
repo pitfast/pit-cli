@@ -34,8 +34,11 @@ pub fn inspect(args: ResourceInspectArgs) -> Result<()> {
     println!("Resource: {}", resource.id);
     println!("Kind: {}", resource.kind);
     println!("Provider: {}", resource.provider);
+    println!("Mode: passthrough");
     println!("URL environment variable: {}", resource.url_env);
-    println!("Secret value: redacted");
+    println!("Gateway: 127.0.0.1:7432");
+    println!("Database identity: {}", resource.id);
+    println!("Credentials: redacted");
     Ok(())
 }
 
