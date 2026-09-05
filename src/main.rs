@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 mod commands;
+mod project;
 
 #[derive(Debug, Parser)]
 #[command(name = "pit", about = "PitFast developer CLI")]
@@ -14,10 +15,16 @@ struct Cli {
 enum Command {
     /// Build the current Rust project into a PitFast WASM artifact.
     Build(commands::build::BuildArgs),
+    /// Initialize PitFast project configuration and ignore generated output.
+    Init,
     /// Run a WASI Preview 1 artifact through PitBox.
     Run(commands::run::RunArgs),
     /// Run a local concurrency benchmark through PitBox.
     Bench(commands::bench::BenchArgs),
+    /// Inspect a project-managed artifact manifest and verify its integrity.
+    Inspect(commands::inspect::InspectArgs),
+    /// Remove only the current project's generated .pit directory.
+    Clean,
     /// Display local PitBox hardware and scheduler information.
     System,
 }
@@ -35,8 +42,11 @@ async fn main() -> Result<()> {
 
     match Cli::parse().command {
         Command::Build(args) => commands::build::run(args).await,
+        Command::Init => commands::init::run(),
         Command::Run(args) => commands::run::run(args).await,
         Command::Bench(args) => commands::bench::run(args).await,
+        Command::Inspect(args) => commands::inspect::run(args),
+        Command::Clean => commands::clean::run(),
         Command::System => commands::system::run(),
     }
 }

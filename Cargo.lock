@@ -1238,14 +1238,27 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "pit-artifact",
  "pit-builder-rust",
  "pit-crew",
  "pit-node",
  "pit-scheduler",
+ "serde",
  "serde_json",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "pit-artifact"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1254,6 +1267,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "pit-artifact",
  "pit-crew",
  "serde",
  "serde_json",
@@ -1268,6 +1282,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "pit-artifact",
  "serde",
  "serde_json",
  "tokio",
@@ -1279,6 +1294,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "pit-artifact",
  "pit-runtime",
  "pit-scheduler",
 ]

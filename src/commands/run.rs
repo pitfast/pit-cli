@@ -3,11 +3,13 @@ use std::time::Duration;
 
 use anyhow::{Result, bail};
 use clap::Args;
-use pit_crew::ArtifactManifest;
+use pit_artifact::{ArtifactManifest, manifest_path};
 use pit_node::{
     ExecutionLimits, ExecutionRequest, ExecutionResult, ExecutionStatus, PitNode, WasmArtifact,
 };
 use pit_scheduler::ExecutionEvent;
+
+use crate::project;
 
 #[derive(Debug, Args)]
 pub struct RunArgs {
@@ -41,39 +43,101 @@ pub async fn resolve_artifact(project_dir: &Path, wasm_file: Option<&Path>) -> R
             project_dir.join(path)
         });
     }
-    let manifest = ArtifactManifest::read(project_dir).await?;
-    manifest.resolve_path(project_dir)
+    Ok(load_managed_artifact(project_dir)?.1)
+}
+
+pub fn load_managed_artifact(project_dir: &Path) -> Result<(ArtifactManifest, PathBuf)> {
+    let manifest = ArtifactManifest::load(manifest_path(project_dir)).map_err(|error| {
+        anyhow::anyhow!("artifact integrity check failed: {error}\nRun: pit build")
+    })?;
+    pit_node::validate_runtime_spec(&manifest.runtime)
+        .map_err(|error| anyhow::anyhow!("artifact runtime compatibility check failed: {error}"))?;
+    let path = manifest.verify_artifact(project_dir).map_err(|error| {
+        anyhow::anyhow!("artifact integrity check failed: {error}\nRun: pit build")
+    })?;
+    Ok((manifest, path))
 }
 
 pub async fn run(args: RunArgs) -> Result<()> {
     let project_dir = std::env::current_dir()?;
-    let wasm_file = resolve_artifact(&project_dir, args.wasm_file.as_deref()).await?;
-    run_artifact(
+    let config = project::load(&project_dir)?;
+    let config_defaults = project::execution_defaults(&config)?;
+    let (manifest, wasm_file) = if args.wasm_file.is_some() {
+        (
+            None,
+            resolve_artifact(&project_dir, args.wasm_file.as_deref()).await?,
+        )
+    } else {
+        let (manifest, path) = load_managed_artifact(&project_dir)?;
+        (Some(manifest), path)
+    };
+    let timeout = args
+        .timeout
+        .or_else(|| config_defaults.timeout_ms.map(Duration::from_millis))
+        .or_else(|| {
+            manifest
+                .as_ref()
+                .and_then(|m| m.execution.timeout_ms)
+                .map(Duration::from_millis)
+        });
+    let memory = args
+        .memory
+        .or_else(|| {
+            config_defaults
+                .memory_bytes
+                .and_then(|value| usize::try_from(value).ok())
+        })
+        .or_else(|| {
+            manifest
+                .as_ref()
+                .and_then(|m| m.execution.memory_bytes)
+                .and_then(|value| usize::try_from(value).ok())
+        });
+    let entrypoint = manifest
+        .as_ref()
+        .map(|manifest| manifest.runtime.entrypoint.clone())
+        .unwrap_or_else(|| "_start".to_owned());
+    run_artifact(RunOptions {
         wasm_file,
-        args.concurrency,
-        args.env,
-        args.timeout,
-        args.memory,
-        args.guest_args,
-        args.verbose,
-    )
+        concurrency: args.concurrency,
+        env: args.env,
+        timeout,
+        memory,
+        entrypoint,
+        guest_args: args.guest_args,
+        verbose: args.verbose,
+    })
 }
 
-fn run_artifact(
+struct RunOptions {
     wasm_file: PathBuf,
     concurrency: usize,
     env: Vec<(String, String)>,
     timeout: Option<Duration>,
     memory: Option<usize>,
+    entrypoint: String,
     guest_args: Vec<String>,
     verbose: bool,
-) -> Result<()> {
+}
+
+fn run_artifact(options: RunOptions) -> Result<()> {
+    let RunOptions {
+        wasm_file,
+        concurrency,
+        env,
+        timeout,
+        memory,
+        entrypoint,
+        guest_args,
+        verbose,
+    } = options;
     if concurrency == 0 {
         bail!("concurrency must be greater than zero");
     }
 
     let artifact = WasmArtifact::from_path(&wasm_file);
     let request = ExecutionRequest::new(artifact.clone())
+        .with_entrypoint(entrypoint)
         .with_args(guest_args)
         .with_env(env)
         .with_limits(ExecutionLimits {

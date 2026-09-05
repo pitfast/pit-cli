@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::Args;
 use pit_node::{ExecutionResult, PitNode};
 
-use super::run::{format_duration, resolve_artifact};
+use super::run::{format_duration, load_managed_artifact, resolve_artifact};
 
 #[derive(Debug, Args)]
 pub struct BenchArgs {
@@ -14,7 +14,11 @@ pub struct BenchArgs {
 
 pub async fn run(args: BenchArgs) -> Result<()> {
     let project_dir = std::env::current_dir()?;
-    let wasm_file = resolve_artifact(&project_dir, args.wasm_file.as_deref()).await?;
+    let wasm_file = if args.wasm_file.is_some() {
+        resolve_artifact(&project_dir, args.wasm_file.as_deref()).await?
+    } else {
+        load_managed_artifact(&project_dir)?.1
+    };
     benchmark(wasm_file)
 }
 
