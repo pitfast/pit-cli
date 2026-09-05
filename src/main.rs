@@ -13,10 +13,15 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Build the current Rust project into a PitFast WASM artifact.
+    /// Build the current project into a language-neutral PitFast WASM artifact.
     Build(commands::build::BuildArgs),
     /// Initialize PitFast project configuration and ignore generated output.
-    Init,
+    Init(commands::init::InitArgs),
+    /// Probe installed source-language toolchains and component support.
+    Doctor {
+        #[command(subcommand)]
+        command: Option<DoctorCommand>,
+    },
     /// Run a WASI Preview 1 or Preview 2 artifact through PitBox.
     Run(commands::run::RunArgs),
     /// Run a local concurrency benchmark through PitBox.
@@ -76,6 +81,11 @@ enum PaddockCommand {
     Inspect(commands::paddock::InspectArgs),
 }
 
+#[derive(Debug, Subcommand)]
+pub(crate) enum DoctorCommand {
+    Languages,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -89,7 +99,8 @@ async fn main() -> Result<()> {
 
     match Cli::parse().command {
         Command::Build(args) => commands::build::run(args).await,
-        Command::Init => commands::init::run(),
+        Command::Init(args) => commands::init::run(args),
+        Command::Doctor { command } => commands::doctor::run(command).await,
         Command::Run(args) => commands::run::run(args).await,
         Command::Bench(args) => commands::bench::run(args).await,
         Command::Inspect(args) => commands::inspect::run(args),

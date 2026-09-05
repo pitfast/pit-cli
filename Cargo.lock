@@ -1633,6 +1633,12 @@ dependencies = [
  "anyhow",
  "clap",
  "pit-artifact",
+ "pit-builder-core",
+ "pit-builder-experimental",
+ "pit-builder-go",
+ "pit-builder-js",
+ "pit-builder-native",
+ "pit-builder-python",
  "pit-builder-rust",
  "pit-crew",
  "pit-deployment",
@@ -1663,12 +1669,83 @@ dependencies = [
 ]
 
 [[package]]
+name = "pit-builder-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pit-artifact",
+ "serde",
+]
+
+[[package]]
+name = "pit-builder-experimental"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pit-artifact",
+ "pit-builder-core",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "pit-builder-go"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pit-artifact",
+ "pit-builder-core",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+]
+
+[[package]]
+name = "pit-builder-js"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pit-artifact",
+ "pit-builder-core",
+ "sha2 0.10.9",
+ "tokio",
+]
+
+[[package]]
+name = "pit-builder-native"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pit-artifact",
+ "pit-builder-core",
+ "sha2 0.10.9",
+ "tokio",
+]
+
+[[package]]
+name = "pit-builder-python"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pit-artifact",
+ "pit-builder-core",
+ "sha2 0.10.9",
+ "tokio",
+]
+
+[[package]]
 name = "pit-builder-rust"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "pit-artifact",
+ "pit-builder-core",
  "pit-crew",
  "serde",
  "serde_json",
@@ -1684,6 +1761,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "pit-artifact",
+ "pit-builder-core",
  "serde",
  "serde_json",
  "tokio",

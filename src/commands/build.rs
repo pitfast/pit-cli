@@ -1,15 +1,24 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Args;
 use pit_artifact::{ComponentWorld, RuntimeAbi};
+use pit_builder_experimental::ExperimentalBuilder;
+use pit_builder_go::GoBuilder;
+use pit_builder_js::JsBuilder;
+use pit_builder_native::NativeBuilder;
+use pit_builder_python::PythonBuilder;
 use pit_builder_rust::RustBuilder;
-use pit_crew::{BuildProfile, BuildRequest, PitCrew};
+use pit_crew::{BuildProfile, BuildRequest, Language, LanguageBuilder, PitCrew};
 
 use crate::project;
 
 #[derive(Debug, Args)]
 pub struct BuildArgs {
+    /// Select the source language, overriding pit.toml and detection.
+    #[arg(long)]
+    pub language: Option<Language>,
     /// Select a binary target when the project has more than one.
     #[arg(long)]
     pub bin: Option<String>,
@@ -39,6 +48,7 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     let request = BuildRequest {
         project_dir: project_dir.clone(),
         bin: args.bin.or(config.build.bin),
+        wit_path: None,
         profile,
         abi: args
             .abi
@@ -47,8 +57,19 @@ pub async fn run(args: BuildArgs) -> Result<()> {
         world: args.world.or(config.build.world),
         execution_defaults: defaults,
         force: args.force,
+        language: args.language.or(config.build.language),
     };
-    let crew = PitCrew::with_adapter(RustBuilder::new());
+    let crew = PitCrew::new(vec![
+        Arc::new(RustBuilder::new()) as Arc<dyn LanguageBuilder>,
+        Arc::new(GoBuilder::new()),
+        Arc::new(NativeBuilder::c()),
+        Arc::new(NativeBuilder::cpp()),
+        Arc::new(JsBuilder::javascript()),
+        Arc::new(JsBuilder::typescript()),
+        Arc::new(PythonBuilder::new()),
+        Arc::new(ExperimentalBuilder::csharp()),
+        Arc::new(ExperimentalBuilder::java()),
+    ]);
     let outcome = crew.build_with_status(request).await?;
     let artifact = outcome.artifact;
     let display_path = artifact
@@ -59,7 +80,11 @@ pub async fn run(args: BuildArgs) -> Result<()> {
 
     println!("PitCrew");
     println!();
-    println!("Language: Rust");
+    println!("Language: {}", artifact.manifest.build.language);
+    println!(
+        "Toolchain: {} {}",
+        artifact.toolchain.name, artifact.toolchain.version
+    );
     println!("Target: {}", artifact.manifest.build.target);
     println!("Profile: {}", artifact.manifest.build.profile.as_str());
     if let Some(world) = artifact.manifest.runtime.world {

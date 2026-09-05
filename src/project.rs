@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use pit_artifact::{ComponentWorld, ExecutionDefaults, RuntimeAbi};
+use pit_crew::Language;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -26,6 +27,7 @@ pub struct ProjectSection {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BuildSection {
+    pub language: Option<Language>,
     pub bin: Option<String>,
     pub abi: Option<RuntimeAbi>,
     pub world: Option<ComponentWorld>,
@@ -94,9 +96,18 @@ pub fn execution_defaults(config: &ProjectConfig) -> Result<ExecutionDefaults> {
     })
 }
 
-pub fn init(project_dir: &Path) -> Result<bool> {
-    if !project_dir.join("Cargo.toml").is_file() {
-        bail!("pit init requires an existing Rust project with Cargo.toml");
+pub fn init(project_dir: &Path, language: Language) -> Result<bool> {
+    let marker = match language {
+        Language::Rust => "Cargo.toml",
+        Language::Go => "go.mod",
+        Language::Python => "pyproject.toml",
+        Language::JavaScript | Language::TypeScript => "package.json",
+        Language::C | Language::Cpp => "CMakeLists.txt",
+        Language::CSharp => "*.csproj",
+        Language::Java => "pom.xml or build.gradle",
+    };
+    if !project_has_marker(project_dir, language) {
+        bail!("pit init requires an existing {language} project ({marker})");
     }
     let config = config_path(project_dir);
     let created_config = if config.exists() {
@@ -109,13 +120,42 @@ pub fn init(project_dir: &Path) -> Result<bool> {
         fs::write(
             &config,
             format!(
-                "[project]\nname = \"{name}\"\n\n[build]\nabi = \"wasi-preview2\"\n# bin = \"binary-name\"\n\n[execution]\n# timeout = \"2s\"\n# memory = \"64MiB\"\n"
+                "[project]\nname = \"{name}\"\n\n[build]\nlanguage = \"{language}\"\nabi = \"wasi-preview2\"\n# bin = \"binary-name\"\n\n[execution]\n# timeout = \"2s\"\n# memory = \"64MiB\"\n"
             ),
         )?;
         true
     };
     ensure_gitignore(project_dir)?;
     Ok(created_config)
+}
+
+fn project_has_marker(project_dir: &Path, language: Language) -> bool {
+    match language {
+        Language::Rust => project_dir.join("Cargo.toml").is_file(),
+        Language::Go => project_dir.join("go.mod").is_file(),
+        Language::Python => {
+            project_dir.join("pyproject.toml").is_file() || project_dir.join("setup.py").is_file()
+        }
+        Language::JavaScript | Language::TypeScript => project_dir.join("package.json").is_file(),
+        Language::C | Language::Cpp => {
+            project_dir.join("CMakeLists.txt").is_file() || project_dir.join("pit.toml").is_file()
+        }
+        Language::CSharp => fs::read_dir(project_dir)
+            .map(|entries| {
+                entries.flatten().any(|entry| {
+                    entry
+                        .path()
+                        .extension()
+                        .is_some_and(|extension| extension == "csproj")
+                })
+            })
+            .unwrap_or(false),
+        Language::Java => {
+            project_dir.join("pom.xml").is_file()
+                || project_dir.join("build.gradle").is_file()
+                || project_dir.join("build.gradle.kts").is_file()
+        }
+    }
 }
 
 fn ensure_gitignore(project_dir: &Path) -> Result<()> {
@@ -183,8 +223,8 @@ mod tests {
         let project = std::env::temp_dir().join(format!("pit-project-{}", std::process::id()));
         fs::create_dir_all(&project).unwrap();
         fs::write(project.join("Cargo.toml"), "[package]\nname=\"x\"\n").unwrap();
-        assert!(init(&project).unwrap());
-        assert!(!init(&project).unwrap());
+        assert!(init(&project, pit_crew::Language::Rust).unwrap());
+        assert!(!init(&project, pit_crew::Language::Rust).unwrap());
         let config = load(&project).unwrap();
         assert_eq!(
             config.project.name.as_deref(),

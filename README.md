@@ -22,19 +22,29 @@ The project contract has three layers:
 
 ## Primary workflow
 
-From a Rust binary project:
+From any unambiguous supported project:
 
 ~~~bash
 pit build
 pit run
 ~~~
 
-pit build detects the Cargo project and its binary target, invokes the Rust
-WASI Preview 2 builder by default, validates the generated component, and writes
-.pit/build/<name>.wasm plus .pit/artifact.json. With multiple binaries, select
-one with pit build --bin <name>. Repeated builds reuse a valid artifact when
-the source/build fingerprint is unchanged. Use pit build --force to rebuild.
-Use pit build --debug for a debug profile.
+`pit build` selects the registered `LanguageBuilder` by explicit `--language`,
+`pit.toml`, or deterministic auto-detection. Rust, Go, C, C++, JavaScript,
+TypeScript, and Python currently pass real Component lifecycle tests. With
+multiple possible build roots, detection fails instead of guessing. Use
+`pit doctor languages` to inspect actual toolchain capability.
+
+~~~bash
+pit build --language rust
+pit build --language go
+pit build --language python
+pit doctor languages
+~~~
+
+The selected builder validates the Component, writes `.pit/build/<name>.wasm`
+and `.pit/artifact.json`, and participates in the same cache/fingerprint path.
+Use `pit build --force` to rebuild and `pit build --debug` for a debug profile.
 Use pit build --abi wasi-preview1 for the legacy core-module compatibility path.
 
 ## Runtime commands
@@ -46,7 +56,9 @@ pit run
 pit bench
 pit bench ./custom.wasm
 pit system
-pit init
+pit init --language rust
+pit init --language go
+pit init --language python
 pit inspect
 pit clean
 pit call pit://service-a/hello
@@ -87,8 +99,9 @@ override pit.toml values, which override manifest execution defaults, which
 override PitFast runtime defaults.
 
 pit inspect prints and verifies a manifest without executing WASM. pit clean
-removes only .pit/. pit init creates a small pit.toml for an existing Cargo
-project and ensures .pit/ is in .gitignore.
+removes only .pit/. pit init records the selected language in an existing
+project and ensures .pit/ is in .gitignore; it does not generate a
+framework-specific application template.
 
 WASI Preview 2 command and `wasi:http/proxy` components are supported. Managed
 artifacts are integrity-checked before execution; custom database WIT, PGlite,
@@ -136,3 +149,34 @@ and activate it. A missing digest is fetched by digest for rollback; historical
 tags are never re-resolved. `--paddock-dir` is an explicit filesystem override,
 useful for offline tests. Remote acquisition has a bounded 30-second timeout
 and three attempts. Paddock is never contacted on the request hot path.
+
+## Language status
+
+After build time the runtime is language-neutral: PitBox sees only the
+manifest's WASI ABI/world and a prepared Module/Component. It never starts a
+Node, Python, JVM, or .NET process for a request. JavaScript and Python runtime
+support is embedded in their Components.
+
+| Language | Status | Build-time path |
+| --- | --- | --- |
+| Rust | First-class | rustc/Cargo |
+| Go | First-class | TinyGo/componentize-go |
+| C | First-class | WASI SDK clang + wit-bindgen C ABI |
+| C++ | First-class | WASI SDK clang++ + stable generated C ABI |
+| JavaScript | First-class | Node + componentize-js |
+| TypeScript | First-class | tsc + componentize-js |
+| Python | First-class | componentize-py with embedded Python |
+| C# | Blocked | available .NET workload is browser-WASM only; no standalone wasm32-wasi Component backend |
+| Java | Blocked | no validated Java-to-WASI-Component toolchain in this environment |
+
+The C++ fixture uses the generated stable C ABI because the current C++ guest
+binding output has an upstream `std::expected`/forward-declaration issue; the
+result is still a standard `wasi:http/proxy` Component. Python's fixture uses
+the official componentize-py support package. These are adapter/toolchain
+details and do not enter PitBox execution dispatch.
+
+Known Python limitation: the current upstream componentize-py pre-initialized
+CPython snapshot is not byte-for-byte deterministic across forced rebuilds.
+Normal fingerprint cache reuse remains stable, but `pit build --force` may
+produce a different Python artifact digest; PitFast reports this limitation
+rather than treating the outputs as reproducible.

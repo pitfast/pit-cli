@@ -14,6 +14,12 @@ anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 pit-artifact = { path = "../pit-crew/crates/pit-artifact" }
 pit-builder-rust = { path = "../pit-crew/crates/pit-builder-rust" }
+pit-builder-go = { path = "../pit-crew/crates/pit-builder-go" }
+pit-builder-native = { path = "../pit-crew/crates/pit-builder-native" }
+pit-builder-js = { path = "../pit-crew/crates/pit-builder-js" }
+pit-builder-python = { path = "../pit-crew/crates/pit-builder-python" }
+pit-builder-experimental = { path = "../pit-crew/crates/pit-builder-experimental" }
+pit-builder-core = { path = "../pit-crew/crates/pit-builder-core" }
 pit-crew = { path = "../pit-crew/crates/pit-crew" }
 pit-node = { path = "../pit-box/apps/pit-node" }
 pit-scheduler = { path = "../pit-box/crates/pit-scheduler" }

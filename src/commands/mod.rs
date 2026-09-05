@@ -3,6 +3,7 @@ pub mod build;
 pub mod call;
 pub mod clean;
 pub mod deploy;
+pub mod doctor;
 pub mod init;
 pub mod inspect;
 pub mod paddock;
