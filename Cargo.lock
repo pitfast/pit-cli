@@ -1362,6 +1362,7 @@ dependencies = [
  "pit-artifact",
  "pit-builder-rust",
  "pit-crew",
+ "pit-deployment",
  "pit-lane-core",
  "pit-node",
  "pit-paddock-core",
@@ -1412,6 +1413,18 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "pit-deployment"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "pit-artifact",
+ "pit-paddock-core",
+ "serde",
+ "serde_json",
+ "wasmparser 0.240.0",
 ]
 
 [[package]]

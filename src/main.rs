@@ -48,18 +48,26 @@ enum Command {
         #[command(subcommand)]
         command: PaddockCommand,
     },
+    /// Activate an immutable artifact for a logical service.
+    Deploy(commands::deploy::DeployArgs),
+    /// Roll a service back to a previous immutable revision.
+    Rollback(commands::deploy::RollbackArgs),
+    /// Stop routing new requests to a service without deleting history.
+    Undeploy(commands::deploy::UndeployArgs),
 }
 
 #[derive(Debug, Subcommand)]
 enum ResourceCommand {
-    List,
+    List(commands::deploy::ServiceListArgs),
     Inspect(commands::resource::ResourceInspectArgs),
     Check(commands::resource::ResourceInspectArgs),
 }
 
 #[derive(Debug, Subcommand)]
 enum ServiceCommand {
-    Inspect(commands::service::InspectArgs),
+    Inspect(commands::deploy::ServiceInspectArgs),
+    List,
+    History(commands::deploy::HistoryArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -94,7 +102,9 @@ async fn main() -> Result<()> {
             ResourceCommand::Check(args) => commands::resource::check(args),
         },
         Command::Service { command } => match command {
-            ServiceCommand::Inspect(args) => commands::service::inspect(args),
+            ServiceCommand::Inspect(args) => commands::deploy::service_inspect(args).await,
+            ServiceCommand::List(args) => commands::deploy::service_list(args).await,
+            ServiceCommand::History(args) => commands::deploy::service_history(args).await,
         },
         Command::Push(args) => commands::paddock::push(args).await,
         Command::Pull(args) => commands::paddock::pull(args).await,
@@ -102,5 +112,8 @@ async fn main() -> Result<()> {
             PaddockCommand::List(args) => commands::paddock::list(args).await,
             PaddockCommand::Inspect(args) => commands::paddock::inspect(args).await,
         },
+        Command::Deploy(args) => commands::deploy::deploy(args).await,
+        Command::Rollback(args) => commands::deploy::rollback(args).await,
+        Command::Undeploy(args) => commands::deploy::undeploy(args).await,
     }
 }

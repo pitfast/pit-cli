@@ -18,6 +18,7 @@ pit-crew = { path = "../pit-crew/crates/pit-crew" }
 pit-node = { path = "../pit-box/apps/pit-node" }
 pit-scheduler = { path = "../pit-box/crates/pit-scheduler" }
 pit-lane-core = { path = "../pit-lane/crates/pit-lane-core" }
+pit-deployment = { path = "../pit-lane/crates/pit-deployment" }
 pit-paddock-core = { path = "../pit-paddock/crates/pit-paddock-core" }
 pit-paddock-fs = { path = "../pit-paddock/crates/pit-paddock-fs" }
 reqwest = { version = "0.12", default-features = false }
@@ -25,7 +26,5 @@ tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 serde = { version = "1.0", features = ["derive"] }
-toml = "0.9"
-
-[dev-dependencies]
 serde_json = "1.0"
+toml = "0.9"

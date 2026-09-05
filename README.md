@@ -56,6 +56,14 @@ pit push service-a:v1 --paddock-dir /tmp/pit-paddock
 pit pull service-a:v1 --paddock-dir /tmp/pit-paddock
 pit paddock list --paddock-dir /tmp/pit-paddock
 pit paddock inspect service-a:v1 --paddock-dir /tmp/pit-paddock
+pit deploy service-a service-a:v1 --paddock-dir /tmp/pit-paddock
+pit deploy service-a sha256:<64-lowercase-hex> --artifact-store /path/to/artifacts
+pit deploy service-a --local
+pit service list
+pit service inspect service-a
+pit service history service-a
+pit rollback service-a
+pit undeploy service-a
 ~~~
 
 Resource and service configuration can be inspected without printing secrets:
@@ -93,3 +101,10 @@ The current development build uses relative path dependencies on ../pit-box and
 Paddock uses the local filesystem backend by default; `PIT_PADDOCK_ROOT` or
 `--paddock-dir` selects its content-addressed root. Paddock refs are mutable
 name:tag pointers, while `sha256:` digests identify immutable artifact bytes.
+
+Deployment resolves a ref once and sends the verified digest and local
+digest-addressed artifact to PitLane's loopback-only control endpoint
+(`127.0.0.1:7081` by default). The CLI does not edit deployment state files or
+the live registry. `pit rollback` uses a historical digest directly; it does
+not re-resolve the historical source tag. `pit undeploy` stops new routing but
+keeps state history and artifacts.
