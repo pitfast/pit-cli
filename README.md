@@ -49,6 +49,18 @@ pit system
 pit init
 pit inspect
 pit clean
+pit call pit://service-a/hello
+pit call --method POST --header 'Content-Type: application/json' \
+  --body '{"hello":"world"}' pit://service-a/echo
+~~~
+
+Resource and service configuration can be inspected without printing secrets:
+
+~~~bash
+pit resource list
+pit resource inspect main
+pit resource check main
+pit service inspect service-a
 ~~~
 
 run, bench, and system use PitBox's existing local WASI Preview 1 and Preview 2 execution,
@@ -65,9 +77,11 @@ pit inspect prints and verifies a manifest without executing WASM. pit clean
 removes only .pit/. pit init creates a small pit.toml for an existing Cargo
 project and ensures .pit/ is in .gitignore.
 
-WASI Preview 2 command-style components are the canonical new workload. PitFast
-does not yet support arbitrary WASI HTTP components, custom WIT interfaces, or
-other languages. Managed artifacts are integrity-checked before execution;
+WASI Preview 2 command and `wasi:http/proxy` components are supported. Managed
+artifacts are integrity-checked before execution; custom database WIT, PGlite,
+TLS, and unrestricted external networking are not included. `pit call` uses
+PitLane's local logical resolver; it does not resolve the service name with
+DNS.
 raw `pit run ./custom.wasm` remains available without a manifest.
 
 The current development build uses relative path dependencies on ../pit-box and

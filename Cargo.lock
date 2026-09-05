@@ -1417,6 +1417,8 @@ name = "pit-lane-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
+ "http",
  "pit-artifact",
  "serde",
 ]
@@ -1428,6 +1430,7 @@ dependencies = [
  "anyhow",
  "clap",
  "pit-artifact",
+ "pit-lane-core",
  "pit-runtime",
  "pit-scheduler",
 ]
@@ -1442,8 +1445,10 @@ dependencies = [
  "http-body-util",
  "hyper",
  "pit-artifact",
+ "pit-lane-core",
  "sha2",
  "tokio",
+ "tracing",
  "wasmparser 0.240.0",
  "wasmtime",
  "wasmtime-wasi",

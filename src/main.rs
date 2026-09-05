@@ -29,6 +29,28 @@ enum Command {
     System,
     /// Call a logical PitFast HTTP service through the local PitLane.
     Call(commands::call::CallArgs),
+    /// Inspect configured PostgreSQL resources.
+    Resource {
+        #[command(subcommand)]
+        command: ResourceCommand,
+    },
+    /// Inspect configured logical services.
+    Service {
+        #[command(subcommand)]
+        command: ServiceCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ResourceCommand {
+    List,
+    Inspect(commands::resource::ResourceInspectArgs),
+    Check(commands::resource::ResourceInspectArgs),
+}
+
+#[derive(Debug, Subcommand)]
+enum ServiceCommand {
+    Inspect(commands::service::InspectArgs),
 }
 
 #[tokio::main]
@@ -51,5 +73,13 @@ async fn main() -> Result<()> {
         Command::Clean => commands::clean::run(),
         Command::System => commands::system::run(),
         Command::Call(args) => commands::call::run(args).await,
+        Command::Resource { command } => match command {
+            ResourceCommand::List => commands::resource::list(),
+            ResourceCommand::Inspect(args) => commands::resource::inspect(args),
+            ResourceCommand::Check(args) => commands::resource::check(args),
+        },
+        Command::Service { command } => match command {
+            ServiceCommand::Inspect(args) => commands::service::inspect(args),
+        },
     }
 }

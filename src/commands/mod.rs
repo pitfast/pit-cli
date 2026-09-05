@@ -4,5 +4,7 @@ pub mod call;
 pub mod clean;
 pub mod init;
 pub mod inspect;
+pub mod resource;
 pub mod run;
+pub mod service;
 pub mod system;

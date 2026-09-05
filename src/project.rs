@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -11,6 +12,9 @@ pub struct ProjectConfig {
     pub project: ProjectSection,
     pub build: BuildSection,
     pub execution: ExecutionSection,
+    pub resources: Vec<ResourceSection>,
+    pub service: ServiceSection,
+    pub network: NetworkSection,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -32,6 +36,31 @@ pub struct BuildSection {
 pub struct ExecutionSection {
     pub timeout: Option<String>,
     pub memory: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ResourceSection {
+    pub id: String,
+    pub kind: String,
+    pub provider: String,
+    pub url_env: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ServiceSection {
+    pub name: Option<String>,
+    pub artifact: Option<String>,
+    pub resources: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NetworkSection {
+    pub internal_services: Option<bool>,
+    pub external_http: Option<bool>,
+    pub tcp_allowlist: Vec<String>,
 }
 
 pub fn config_path(project_dir: &Path) -> PathBuf {
