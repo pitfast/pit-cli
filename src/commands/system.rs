@@ -14,5 +14,9 @@ pub fn run() -> Result<()> {
     println!("  wasi-preview2  supported");
     println!();
     println!("Canonical ABI: wasi-preview2");
+    println!();
+    println!("Component Worlds");
+    println!("  wasi:cli/command  supported");
+    println!("  wasi:http/proxy   supported");
     Ok(())
 }

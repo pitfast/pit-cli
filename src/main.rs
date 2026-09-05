@@ -27,6 +27,8 @@ enum Command {
     Clean,
     /// Display local PitBox hardware and scheduler information.
     System,
+    /// Call a logical PitFast HTTP service through the local PitLane.
+    Call(commands::call::CallArgs),
 }
 
 #[tokio::main]
@@ -48,5 +50,6 @@ async fn main() -> Result<()> {
         Command::Inspect(args) => commands::inspect::run(args),
         Command::Clean => commands::clean::run(),
         Command::System => commands::system::run(),
+        Command::Call(args) => commands::call::run(args).await,
     }
 }

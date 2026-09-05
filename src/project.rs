@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use pit_artifact::{ExecutionDefaults, RuntimeAbi};
+use pit_artifact::{ComponentWorld, ExecutionDefaults, RuntimeAbi};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -24,6 +24,7 @@ pub struct ProjectSection {
 pub struct BuildSection {
     pub bin: Option<String>,
     pub abi: Option<RuntimeAbi>,
+    pub world: Option<ComponentWorld>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

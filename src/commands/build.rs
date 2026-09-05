@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Args;
-use pit_artifact::RuntimeAbi;
+use pit_artifact::{ComponentWorld, RuntimeAbi};
 use pit_builder_rust::RustBuilder;
 use pit_crew::{BuildProfile, BuildRequest, PitCrew};
 
@@ -22,6 +22,9 @@ pub struct BuildArgs {
     /// Select the WASI ABI; defaults to pit.toml or wasi-preview2.
     #[arg(long, value_parser = clap::value_parser!(RuntimeAbi))]
     pub abi: Option<RuntimeAbi>,
+    /// Select the standard P2 component world.
+    #[arg(long, requires = "abi")]
+    pub world: Option<ComponentWorld>,
 }
 
 pub async fn run(args: BuildArgs) -> Result<()> {
@@ -41,6 +44,7 @@ pub async fn run(args: BuildArgs) -> Result<()> {
             .abi
             .or(config.build.abi)
             .unwrap_or_else(RuntimeAbi::wasi_preview2),
+        world: args.world.or(config.build.world),
         execution_defaults: defaults,
         force: args.force,
     };
@@ -58,6 +62,9 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     println!("Language: Rust");
     println!("Target: {}", artifact.manifest.build.target);
     println!("Profile: {}", artifact.manifest.build.profile.as_str());
+    if let Some(world) = artifact.manifest.runtime.world {
+        println!("World: {}", world.as_str());
+    }
     println!();
     if outcome.reused {
         println!("✓ Build inputs unchanged");

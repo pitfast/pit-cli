@@ -39,6 +39,9 @@ pub fn run(args: InspectArgs) -> Result<()> {
     println!("Runtime");
     println!("  ABI: {}", manifest.runtime.abi.as_str());
     println!("  Format: {}", manifest.runtime.format);
+    if let Some(world) = manifest.runtime.world {
+        println!("  World: {}", world.as_str());
+    }
     println!("  Entrypoint: {}", manifest.runtime.entrypoint);
     println!();
     println!("Artifact");

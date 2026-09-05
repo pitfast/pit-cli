@@ -2,6 +2,10 @@
 
 pit is the PitFast developer CLI. It is a thin composition layer:
 
+`pit call pit://service/path` sends a logical HTTP request to the local PitLane
+listener without DNS resolution. PitLane selects the service while the guest
+receives the original `/path`.
+
 ~~~text
 pit build → PitCrew
 pit run   → PitBox
