@@ -1364,6 +1364,8 @@ dependencies = [
  "pit-crew",
  "pit-lane-core",
  "pit-node",
+ "pit-paddock-core",
+ "pit-paddock-fs",
  "pit-scheduler",
  "reqwest",
  "serde",
@@ -1433,6 +1435,31 @@ dependencies = [
  "pit-lane-core",
  "pit-runtime",
  "pit-scheduler",
+]
+
+[[package]]
+name = "pit-paddock-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pit-artifact",
+ "serde",
+ "serde_json",
+ "sha2",
+ "wasmparser 0.240.0",
+]
+
+[[package]]
+name = "pit-paddock-fs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pit-artifact",
+ "pit-paddock-core",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

@@ -52,6 +52,10 @@ pit clean
 pit call pit://service-a/hello
 pit call --method POST --header 'Content-Type: application/json' \
   --body '{"hello":"world"}' pit://service-a/echo
+pit push service-a:v1 --paddock-dir /tmp/pit-paddock
+pit pull service-a:v1 --paddock-dir /tmp/pit-paddock
+pit paddock list --paddock-dir /tmp/pit-paddock
+pit paddock inspect service-a:v1 --paddock-dir /tmp/pit-paddock
 ~~~
 
 Resource and service configuration can be inspected without printing secrets:
@@ -86,3 +90,6 @@ raw `pit run ./custom.wasm` remains available without a manifest.
 
 The current development build uses relative path dependencies on ../pit-box and
 ../pit-crew. They can later be replaced with published or git dependencies.
+Paddock uses the local filesystem backend by default; `PIT_PADDOCK_ROOT` or
+`--paddock-dir` selects its content-addressed root. Paddock refs are mutable
+name:tag pointers, while `sha256:` digests identify immutable artifact bytes.

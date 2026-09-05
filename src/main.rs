@@ -39,6 +39,15 @@ enum Command {
         #[command(subcommand)]
         command: ServiceCommand,
     },
+    /// Store the current project artifact in local Paddock.
+    Push(commands::paddock::PushArgs),
+    /// Resolve and verify an artifact from local Paddock.
+    Pull(commands::paddock::PullArgs),
+    /// Inspect local Paddock refs and artifacts.
+    Paddock {
+        #[command(subcommand)]
+        command: PaddockCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -51,6 +60,12 @@ enum ResourceCommand {
 #[derive(Debug, Subcommand)]
 enum ServiceCommand {
     Inspect(commands::service::InspectArgs),
+}
+
+#[derive(Debug, Subcommand)]
+enum PaddockCommand {
+    List(commands::paddock::ListArgs),
+    Inspect(commands::paddock::InspectArgs),
 }
 
 #[tokio::main]
@@ -80,6 +95,12 @@ async fn main() -> Result<()> {
         },
         Command::Service { command } => match command {
             ServiceCommand::Inspect(args) => commands::service::inspect(args),
+        },
+        Command::Push(args) => commands::paddock::push(args).await,
+        Command::Pull(args) => commands::paddock::pull(args).await,
+        Command::Paddock { command } => match command {
+            PaddockCommand::List(args) => commands::paddock::list(args).await,
+            PaddockCommand::Inspect(args) => commands::paddock::inspect(args).await,
         },
     }
 }
