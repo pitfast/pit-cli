@@ -59,6 +59,16 @@ enum Command {
     Rollback(commands::deploy::RollbackArgs),
     /// Stop routing new requests to a service without deleting history.
     Undeploy(commands::deploy::UndeployArgs),
+    /// Inspect Circuit membership and Garage capacity.
+    Circuit {
+        #[command(subcommand)]
+        command: CircuitCommand,
+    },
+    /// Inspect Garage membership and runtime capacity.
+    Garage {
+        #[command(subcommand)]
+        command: GarageCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -79,6 +89,18 @@ enum ServiceCommand {
 enum PaddockCommand {
     List(commands::paddock::ListArgs),
     Inspect(commands::paddock::InspectArgs),
+}
+
+#[derive(Debug, Subcommand)]
+enum CircuitCommand {
+    Status(commands::circuit::EndpointArgs),
+    Snapshot(commands::circuit::EndpointArgs),
+}
+
+#[derive(Debug, Subcommand)]
+enum GarageCommand {
+    List(commands::circuit::EndpointArgs),
+    Inspect(commands::circuit::GarageInspectArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -126,5 +148,13 @@ async fn main() -> Result<()> {
         Command::Deploy(args) => commands::deploy::deploy(args).await,
         Command::Rollback(args) => commands::deploy::rollback(args).await,
         Command::Undeploy(args) => commands::deploy::undeploy(args).await,
+        Command::Circuit { command } => match command {
+            CircuitCommand::Status(args) => commands::circuit::status(args).await,
+            CircuitCommand::Snapshot(args) => commands::circuit::snapshot(args).await,
+        },
+        Command::Garage { command } => match command {
+            GarageCommand::List(args) => commands::circuit::list(args).await,
+            GarageCommand::Inspect(args) => commands::circuit::inspect(args).await,
+        },
     }
 }

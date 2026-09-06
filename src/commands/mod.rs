@@ -1,6 +1,7 @@
 pub mod bench;
 pub mod build;
 pub mod call;
+pub mod circuit;
 pub mod clean;
 pub mod deploy;
 pub mod doctor;

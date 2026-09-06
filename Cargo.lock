@@ -1640,6 +1640,7 @@ dependencies = [
  "pit-builder-native",
  "pit-builder-python",
  "pit-builder-rust",
+ "pit-circuit-core",
  "pit-crew",
  "pit-deployment",
  "pit-lane-core",
@@ -1752,6 +1753,15 @@ dependencies = [
  "sha2 0.10.9",
  "tokio",
  "wasmparser 0.240.0",
+]
+
+[[package]]
+name = "pit-circuit-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "pit-paddock-core",
+ "serde",
 ]
 
 [[package]]

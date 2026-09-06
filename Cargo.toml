@@ -20,6 +20,7 @@ pit-builder-js = { path = "../pit-crew/crates/pit-builder-js" }
 pit-builder-python = { path = "../pit-crew/crates/pit-builder-python" }
 pit-builder-experimental = { path = "../pit-crew/crates/pit-builder-experimental" }
 pit-builder-core = { path = "../pit-crew/crates/pit-builder-core" }
+pit-circuit-core = { path = "../pit-circuit/crates/pit-circuit-core" }
 pit-crew = { path = "../pit-crew/crates/pit-crew" }
 pit-node = { path = "../pit-box/apps/pit-node" }
 pit-scheduler = { path = "../pit-box/crates/pit-scheduler" }
@@ -28,7 +29,7 @@ pit-deployment = { path = "../pit-lane/crates/pit-deployment" }
 pit-paddock-core = { path = "../pit-paddock/crates/pit-paddock-core" }
 pit-paddock-fs = { path = "../pit-paddock/crates/pit-paddock-fs" }
 pit-paddock-factory = { path = "../pit-paddock/crates/pit-paddock-factory" }
-reqwest = { version = "0.12", default-features = false }
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
