@@ -163,12 +163,34 @@ pit doctor
 pit build --language python --interface asgi --entry main:app
 ```
 
+`pit doctor` is intended to answer whether an existing repository can cross
+the WASI boundary before an expensive build. It distinguishes confirmed
+blockers from potential or unknown findings. Use `--verbose` for transitive
+dependency paths and `--json` for CI:
+
+```bash
+pit doctor --verbose
+pit doctor --json
+```
+
+The doctor does not equate framework recognition with compatibility. For
+example, FastAPI is detected as an ASGI hint, then its `fastapi → pydantic →
+pydantic_core` native CPython/Linux wheel is reported as a confirmed blocker
+for the current componentize-py WASI runtime. No host Python process is
+started.
+
 The Python ASGI adapter bridges any compatible ASGI application to
 `wasi:http/proxy`; the PitFast runtime does not know the framework name. A
 project-local declarative adapter can be selected with
 `--adapter ./pit-adapters/<name>` and can introduce a new interface without a
 PitCrew source change. It may list generated source assets, but v0.11 does not
 execute arbitrary downloaded native plugins.
+
+The same interface-first rule applies to JavaScript/TypeScript Fetch handlers
+and Go `net/http` handlers. Fetch projects use `--interface fetch --entry
+main:fetch`; Go projects use `--interface net-http --entry app:Handler`. Their
+generated bridges are build-time files under `.pit/generated`; application
+source is not rewritten and applications do not bind service listeners.
 
 Already-built Components bypass all source detection:
 

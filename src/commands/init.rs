@@ -63,6 +63,31 @@ pub fn run(args: InitArgs) -> Result<()> {
     if let Some(entry) = &entry {
         println!("\nEntrypoint\n  {entry}");
     }
+    if let (Some(interface), Some(entry)) = (&interface, &entry) {
+        let request = pit_crew::BuildRequest {
+            project_dir: project_dir.clone(),
+            abi: pit_artifact::RuntimeAbi::wasi_preview2(),
+            world: None,
+            language: Some(language),
+            application_interface: Some(interface.clone()),
+            entrypoint: Some(entry.clone()),
+            adapter: args.adapter.clone(),
+            ..pit_crew::BuildRequest::new(project_dir.clone())
+        };
+        if let Some(report) = crew.compatibility(&project_dir, &request)? {
+            println!("\nCompatibility\n  status: {:?}", report.status);
+            for finding in &report.findings {
+                let marker = if finding.blocks_build { "✗" } else { "⚠" };
+                println!("  {marker} [{}] {}", finding.category, finding.reason);
+                println!("    action: {}", finding.recommendation);
+            }
+            if report.findings.is_empty() {
+                for message in &report.messages {
+                    println!("  ✓ {message}");
+                }
+            }
+        }
+    }
     if args.dry_run {
         println!("\n(dry run: no files changed)");
         return Ok(());

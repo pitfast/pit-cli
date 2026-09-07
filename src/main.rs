@@ -19,6 +19,12 @@ enum Command {
     Init(commands::init::InitArgs),
     /// Probe installed source-language toolchains and component support.
     Doctor {
+        /// Emit a versioned machine-readable compatibility report.
+        #[arg(long)]
+        json: bool,
+        /// Include dependency paths and low-level evidence.
+        #[arg(long)]
+        verbose: bool,
         #[command(subcommand)]
         command: Option<DoctorCommand>,
     },
@@ -122,7 +128,11 @@ async fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Build(args) => commands::build::run(args).await,
         Command::Init(args) => commands::init::run(args),
-        Command::Doctor { command } => commands::doctor::run(command).await,
+        Command::Doctor {
+            json,
+            verbose,
+            command,
+        } => commands::doctor::run(command, json, verbose).await,
         Command::Run(args) => commands::run::run(args).await,
         Command::Bench(args) => commands::bench::run(args).await,
         Command::Inspect(args) => commands::inspect::run(args),
