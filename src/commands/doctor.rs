@@ -7,12 +7,18 @@ use pit_builder_native::NativeBuilder;
 use pit_builder_python::PythonBuilder;
 use pit_builder_rust::RustBuilder;
 use pit_crew::{ApplicationInterface, Language, LanguageBuilder};
+use std::path::{Path, PathBuf};
 
 use crate::DoctorCommand;
 
-pub async fn run(command: Option<DoctorCommand>, json: bool, verbose: bool) -> Result<()> {
+pub async fn run(
+    command: Option<DoctorCommand>,
+    json: bool,
+    verbose: bool,
+    file: Option<PathBuf>,
+) -> Result<()> {
     if command.is_none() {
-        return project_doctor(json, verbose);
+        return project_doctor(json, verbose, file.as_deref());
     }
     println!("LANGUAGE      TOOLCHAIN                 STATUS");
     for language in Language::ALL {
@@ -22,8 +28,11 @@ pub async fn run(command: Option<DoctorCommand>, json: bool, verbose: bool) -> R
     Ok(())
 }
 
-fn project_doctor(json: bool, verbose: bool) -> Result<()> {
+fn project_doctor(json: bool, verbose: bool, file: Option<&Path>) -> Result<()> {
     let project_dir = std::env::current_dir()?;
+    if let Some(resolved) = crate::manifest::resolve_optional(&project_dir, file)? {
+        return manifest_doctor(resolved, json, verbose);
+    }
     let config = crate::project::load(&project_dir)?;
     let crew = crate::commands::build::default_crew();
     let languages = crew.detect_languages(&project_dir)?;
@@ -169,6 +178,101 @@ fn project_doctor(json: bool, verbose: bool) -> Result<()> {
         } else {
             println!("\nResult\n  No confirmed compatibility blocker found.");
         }
+    }
+    Ok(())
+}
+
+fn manifest_doctor(
+    resolved: crate::manifest::ResolvedManifest,
+    json: bool,
+    verbose: bool,
+) -> Result<()> {
+    let plan = resolved.plan()?;
+    let crew = crate::commands::build::default_crew();
+    let mut services = Vec::new();
+    let mut blocked = false;
+    for service in &plan.services {
+        let request = crate::commands::build::request_for_service(
+            &plan,
+            service,
+            pit_artifact::BuildProfile::Release,
+            false,
+        )?;
+        let candidates = crew.inspect(&service.project_dir)?;
+        let report = crew.compatibility(&service.project_dir, &request)?;
+        if report.as_ref().is_some_and(|value| value.blocks_build()) {
+            blocked = true;
+        }
+        services.push(serde_json::json!({
+            "id": service.id.to_string(),
+            "build": service.project_dir,
+            "interface": request.application_interface.as_ref().map(ToString::to_string),
+            "entrypoint": request.entrypoint,
+            "adapter": request.adapter,
+            "evidence": candidates.iter().flat_map(|candidate| candidate.evidence.clone()).collect::<Vec<_>>(),
+            "compatibility": report,
+        }));
+    }
+    if json {
+        let output = serde_json::json!({
+            "schema_version": 2,
+            "manifest": plan.manifest.path,
+            "manifest_digest": plan.manifest.digest,
+            "application": plan.application_name,
+            "services": services,
+            "resources": plan.resources,
+            "routes": plan.routes.iter().map(|(path, service)| (path, service.to_string())).collect::<std::collections::BTreeMap<_, _>>(),
+            "status": if blocked { "blocked" } else { "ready" },
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        println!(
+            "Pit Application\n  {}\n  manifest: {}",
+            plan.application_name,
+            plan.manifest.path.display()
+        );
+        for service in &plan.services {
+            let request = crate::commands::build::request_for_service(
+                &plan,
+                service,
+                pit_artifact::BuildProfile::Release,
+                false,
+            )?;
+            let report = crew.compatibility(&service.project_dir, &request)?;
+            println!("\n{}", service.id);
+            println!("  build: {}", service.project_dir.display());
+            println!(
+                "  interface: {}",
+                request
+                    .application_interface
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "auto-detect".into())
+            );
+            if let Some(adapter) = request.adapter {
+                println!("  adapter: {adapter}");
+            }
+            if let Some(report) = report {
+                println!("  compatibility: {:?}", report.status);
+                for finding in report.findings {
+                    let marker = if finding.blocks_build { "✗" } else { "⚠" };
+                    println!("  {marker} [{}] {}", finding.category, finding.reason);
+                    if verbose && !finding.dependency_path.is_empty() {
+                        println!("    path: {}", finding.dependency_path.join(" -> "));
+                    }
+                    if verbose {
+                        for evidence in finding.evidence {
+                            println!("    evidence: {} — {}", evidence.source, evidence.detail);
+                        }
+                    }
+                    println!("    action: {}", finding.recommendation);
+                }
+            }
+        }
+        println!("\nOverall: {}", if blocked { "BLOCKED" } else { "READY" });
+    }
+    if blocked {
+        anyhow::bail!("Pit Manifest compatibility has confirmed service blockers");
     }
     Ok(())
 }

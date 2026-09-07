@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 mod commands;
+mod manifest;
 mod project;
 
 #[derive(Debug, Parser)]
@@ -17,6 +18,13 @@ enum Command {
     Build(commands::build::BuildArgs),
     /// Initialize PitFast project configuration and ignore generated output.
     Init(commands::init::InitArgs),
+    /// Build, deploy, and prepare a Pit Manifest application.
+    Up(commands::up::UpArgs),
+    /// Inspect the effective Pit Manifest/application plan.
+    Config {
+        #[command(subcommand)]
+        command: commands::config::ConfigCommand,
+    },
     /// Probe installed source-language toolchains and component support.
     Doctor {
         /// Emit a versioned machine-readable compatibility report.
@@ -25,6 +33,9 @@ enum Command {
         /// Include dependency paths and low-level evidence.
         #[arg(long)]
         verbose: bool,
+        /// Select a Pit Manifest explicitly.
+        #[arg(short = 'f', long = "file")]
+        file: Option<std::path::PathBuf>,
         #[command(subcommand)]
         command: Option<DoctorCommand>,
     },
@@ -128,11 +139,16 @@ async fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Build(args) => commands::build::run(args).await,
         Command::Init(args) => commands::init::run(args),
+        Command::Up(args) => commands::up::run(args).await,
+        Command::Config { command } => match command {
+            commands::config::ConfigCommand::Show(args) => commands::config::show(args),
+        },
         Command::Doctor {
             json,
             verbose,
+            file,
             command,
-        } => commands::doctor::run(command, json, verbose).await,
+        } => commands::doctor::run(command, json, verbose, file).await,
         Command::Run(args) => commands::run::run(args).await,
         Command::Bench(args) => commands::bench::run(args).await,
         Command::Inspect(args) => commands::inspect::run(args),

@@ -10,12 +10,18 @@ use pit_builder_js::JsBuilder;
 use pit_builder_native::NativeBuilder;
 use pit_builder_python::PythonBuilder;
 use pit_builder_rust::RustBuilder;
-use pit_crew::{BuildProfile, BuildRequest, Language, LanguageBuilder, PitCrew};
+use pit_crew::{BuildOutcome, BuildProfile, BuildRequest, Language, LanguageBuilder, PitCrew};
 
+use crate::manifest::{ApplicationPlan, ResolvedService};
 use crate::project;
 
 #[derive(Debug, Args)]
 pub struct BuildArgs {
+    /// Optional service identity from a resolved Pit Manifest.
+    pub service: Option<String>,
+    /// Select a Pit Manifest. Without this flag, *.pit discovery is used when present.
+    #[arg(short = 'f', long = "file")]
+    pub file: Option<PathBuf>,
     /// Select the source language, overriding pit.toml and detection.
     #[arg(long)]
     pub language: Option<Language>,
@@ -69,6 +75,19 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     } else {
         BuildProfile::Release
     };
+    if let Some(resolved) = crate::manifest::resolve_optional(&project_dir, args.file.as_deref())? {
+        let plan = resolved.plan()?;
+        let services = selected_services(&plan, args.service.as_deref())?;
+        println!("Pit Manifest: {}", plan.manifest.path.display());
+        for service in services {
+            let outcome = build_service(&plan, service, profile, args.force).await?;
+            print_build(service, &outcome);
+        }
+        return Ok(());
+    }
+    if args.service.is_some() {
+        anyhow::bail!("service selection requires a Pit Manifest; pass --file or create *.pit");
+    }
     let config = project::load(&project_dir)?;
     let defaults = project::execution_defaults(&config)?;
     let request = BuildRequest {
@@ -130,4 +149,84 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     }
     println!("{}", display_path.display());
     Ok(())
+}
+
+pub fn selected_services<'a>(
+    plan: &'a ApplicationPlan,
+    selected: Option<&str>,
+) -> Result<Vec<&'a ResolvedService>> {
+    if let Some(selected) = selected {
+        let service: pit_lane_core::ServiceId = selected.parse()?;
+        let service = plan
+            .services
+            .iter()
+            .find(|candidate| candidate.id == service)
+            .ok_or_else(|| anyhow::anyhow!("manifest has no service '{selected}'"))?;
+        Ok(vec![service])
+    } else {
+        Ok(plan.services.iter().collect())
+    }
+}
+
+pub async fn build_service(
+    plan: &ApplicationPlan,
+    service: &ResolvedService,
+    profile: BuildProfile,
+    force: bool,
+) -> Result<BuildOutcome> {
+    let request = request_for_service(plan, service, profile, force)?;
+    default_crew().build_with_status(request).await
+}
+
+pub fn request_for_service(
+    plan: &ApplicationPlan,
+    service: &ResolvedService,
+    profile: BuildProfile,
+    force: bool,
+) -> Result<BuildRequest> {
+    let config = project::load(&service.project_dir)?;
+    let defaults = if plan.manifest.manifest.execution.timeout.is_some()
+        || plan.manifest.manifest.execution.memory.is_some()
+    {
+        plan.execution.clone()
+    } else {
+        project::execution_defaults(&config)?
+    };
+    Ok(BuildRequest {
+        project_dir: service.project_dir.clone(),
+        bin: config.build.bin,
+        wit_path: None,
+        profile,
+        abi: service
+            .spec
+            .abi
+            .clone()
+            .or(config.build.abi)
+            .unwrap_or_else(RuntimeAbi::wasi_preview2),
+        world: service.spec.world.or(config.build.world),
+        execution_defaults: defaults,
+        force,
+        language: service.spec.language.or(config.build.language),
+        application_interface: service.spec.interface.clone().or(config.build.interface),
+        entrypoint: service.spec.entry.clone().or(config.build.entry),
+        adapter: service.spec.adapter.clone().or(config.build.adapter),
+        adapter_workspace: None,
+        raw_artifact: service.artifact_path.clone(),
+    })
+}
+
+fn print_build(service: &ResolvedService, outcome: &BuildOutcome) {
+    let artifact = &outcome.artifact;
+    println!(
+        "  {}  {} / {}  {}",
+        service.id,
+        artifact.manifest.build.language,
+        artifact
+            .manifest
+            .build
+            .application_interface
+            .as_deref()
+            .unwrap_or("native"),
+        if outcome.reused { "cached" } else { "built" }
+    );
 }

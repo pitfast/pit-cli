@@ -101,15 +101,14 @@ pub fn run(args: InitArgs) -> Result<()> {
     )?;
     println!("PitFast project initialized");
     if created {
-        println!("✓ Created pit.toml");
+        println!("✓ Created app.pit");
     } else {
-        println!("✓ Kept existing pit.toml");
+        println!("✓ Kept existing Pit Manifest");
     }
     println!("✓ .pit/ is ignored as generated output");
     println!();
     println!("Next steps:");
-    println!("  pit build");
-    println!("  pit inspect");
-    println!("  pit run");
+    println!("  pit doctor");
+    println!("  pit up");
     Ok(())
 }

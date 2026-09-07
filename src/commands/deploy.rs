@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args;
@@ -14,7 +14,9 @@ use reqwest::Client;
 
 #[derive(Debug, Args)]
 pub struct DeployArgs {
-    pub service: String,
+    /// Existing single-service deployment identity. Omit when deploying a
+    /// resolved Pit Manifest application.
+    pub service: Option<String>,
     /// Paddock ref or sha256 digest. Omit with --local.
     pub selector: Option<String>,
     /// Deploy the current project's verified .pit/artifact.json.
@@ -33,6 +35,9 @@ pub struct DeployArgs {
     pub expected_generation: Option<u64>,
     #[arg(long)]
     pub force: bool,
+    /// Select a Pit Manifest and deploy all of its services.
+    #[arg(short = 'f', long = "file")]
+    pub file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -89,7 +94,22 @@ pub struct ServiceInspectArgs {
 }
 
 pub async fn deploy(args: DeployArgs) -> Result<()> {
-    let service: ServiceId = args.service.parse()?;
+    if args.file.is_some() || args.service.is_none() {
+        let cwd = std::env::current_dir()?;
+        let resolved =
+            crate::manifest::resolve_optional(&cwd, args.file.as_deref())?.ok_or_else(|| {
+                anyhow!("ManifestNotFound: deploy needs a service argument or a *.pit manifest")
+            })?;
+        return crate::commands::up::run(crate::commands::up::UpArgs {
+            file: Some(resolved.path),
+            control_endpoint: args.control_endpoint,
+            artifact_store: args.artifact_store,
+            force: args.force,
+            debug: false,
+        })
+        .await;
+    }
+    let service: ServiceId = args.service.as_deref().unwrap().parse()?;
     if args.local == args.selector.is_some() {
         bail!("provide exactly one of an artifact selector or --local")
     }
@@ -174,6 +194,7 @@ pub async fn deploy(args: DeployArgs) -> Result<()> {
             expected_generation: args.expected_generation.or(initial_generation),
             force: args.force,
             stage_durations: acquisition_timings,
+            resource_bindings: Vec::new(),
         },
     )
     .await?;
@@ -207,6 +228,50 @@ pub async fn deploy(args: DeployArgs) -> Result<()> {
         service, response.state.generation, digest
     );
     Ok(())
+}
+
+/// Apply one already-built service from an application plan. `pit up` uses
+/// this shared deployment primitive so build and deploy do not diverge.
+pub async fn deploy_local_project(
+    service: &ServiceId,
+    project_dir: &Path,
+    control_endpoint: &str,
+    artifact_store: Option<PathBuf>,
+    force: bool,
+    resource_bindings: Vec<(String, String)>,
+) -> Result<DeploymentView> {
+    let store = LocalArtifactStore::new(match artifact_store {
+        Some(path) => path,
+        None => LocalArtifactStore::default_root()?,
+    });
+    let manifest_path = project_dir.join(".pit/artifact.json");
+    let manifest = ArtifactManifest::load(&manifest_path)?;
+    let artifact_path = manifest.verify_artifact(project_dir)?;
+    let bytes = tokio::fs::read(&artifact_path).await?;
+    let (artifact_path, manifest_path) = store.install(&manifest, &bytes)?;
+    let digest: ArtifactDigest = format!("sha256:{}", manifest.artifact.sha256).parse()?;
+    let initial_generation = if force {
+        None
+    } else {
+        Some(current_generation(control_endpoint, service).await?)
+    };
+    post_json(
+        control_endpoint,
+        "/v1/deploy",
+        &DeployRequest {
+            service_id: service.to_string(),
+            digest,
+            artifact_path: artifact_path.to_string_lossy().into_owned(),
+            manifest_path: manifest_path.to_string_lossy().into_owned(),
+            source_ref: None,
+            source_paddock: None,
+            expected_generation: initial_generation,
+            force,
+            stage_durations: None,
+            resource_bindings,
+        },
+    )
+    .await
 }
 
 pub async fn rollback(args: RollbackArgs) -> Result<()> {

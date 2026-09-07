@@ -118,8 +118,16 @@ pub fn init_with_options(
     if !project_has_marker(project_dir, language) {
         bail!("pit init requires an existing {language} project ({marker})");
     }
-    let config = config_path(project_dir);
-    let created_config = if config.exists() {
+    let manifests = fs::read_dir(project_dir)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.is_file() && path.extension().and_then(|value| value.to_str()) == Some("pit")
+        })
+        .collect::<Vec<_>>();
+    let manifest = project_dir.join("app.pit");
+    let created_config = if !manifests.is_empty() {
         false
     } else {
         let name = project_dir
@@ -127,7 +135,7 @@ pub fn init_with_options(
             .and_then(|name| name.to_str())
             .unwrap_or("pitfast-project");
         let mut contents = format!(
-            "[project]\nname = \"{name}\"\n\n[build]\nlanguage = \"{language}\"\nabi = \"wasi-preview2\"\n"
+            "schema = 1\nname = \"{name}\"\n\n[service]\nbuild = \".\"\nlanguage = \"{language}\"\nabi = \"wasi-preview2\"\n"
         );
         if let Some(interface) = interface {
             contents.push_str(&format!("interface = \"{interface}\"\n"));
@@ -139,9 +147,9 @@ pub fn init_with_options(
             contents.push_str(&format!("adapter = \"{adapter}\"\n"));
         }
         contents.push_str(
-            "# bin = \"binary-name\"\n\n[execution]\n# timeout = \"2s\"\n# memory = \"64MiB\"\n",
+            "# interface = \"asgi\"\n# entry = \"main:app\"\n# adapter = \"python/asgi\"\n\n[execution]\n# timeout = \"2s\"\n# memory = \"64MiB\"\n",
         );
-        fs::write(&config, contents)?;
+        fs::write(&manifest, contents)?;
         true
     };
     ensure_gitignore(project_dir)?;
@@ -235,8 +243,7 @@ fn parse_memory_bytes(value: &str) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ProjectConfig, execution_defaults, init_with_options, load};
-    use pit_artifact::RuntimeAbi;
+    use super::{ProjectConfig, execution_defaults, init_with_options};
     use std::fs;
 
     #[test]
@@ -246,15 +253,10 @@ mod tests {
         fs::write(project.join("Cargo.toml"), "[package]\nname=\"x\"\n").unwrap();
         assert!(init_with_options(&project, pit_crew::Language::Rust, None, None, None).unwrap());
         assert!(!init_with_options(&project, pit_crew::Language::Rust, None, None, None).unwrap());
-        let config = load(&project).unwrap();
-        assert_eq!(
-            config.project.name.as_deref(),
-            Some(project.file_name().unwrap().to_str().unwrap())
-        );
-        assert_eq!(
-            config.build.abi.as_ref().map(RuntimeAbi::as_str),
-            Some("wasi-preview2")
-        );
+        let manifest = fs::read_to_string(project.join("app.pit")).unwrap();
+        assert!(manifest.contains("schema = 1"));
+        assert!(manifest.contains("build = \".\""));
+        assert!(manifest.contains("abi = \"wasi-preview2\""));
         assert!(project.join(".gitignore").exists());
         let _ = fs::remove_dir_all(project);
     }

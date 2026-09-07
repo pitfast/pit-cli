@@ -20,7 +20,72 @@ The project contract has three layers:
 * .pit/artifact.json contains generated, versioned artifact metadata.
 * .pit/build/*.wasm contains generated executable output.
 
-## Primary workflow
+## Pit Manifest and one-command workflow
+
+The primary application configuration is a Pit Manifest with the `.pit`
+extension. It is TOML-compatible, but its schema and meaning belong to
+PitFast rather than to the legacy project build configuration. `pit init`
+creates the conventional `app.pit`; any filename is valid, so a lone
+`backend.pit` or `customer-acme.pit` works identically.
+
+```toml
+schema = 1
+name = "shop"
+
+[services.api]
+build = "./api"
+interface = "net-http"
+entry = "app:Handler"
+
+[services.catalog]
+build = "./catalog"
+interface = "asgi"
+entry = "main:app"
+
+[routes]
+"/api" = "api"
+"/catalog" = "catalog"
+```
+
+`pit up` resolves, validates, builds, and activates every service in the
+manifest through the existing PitLane deployment primitives. It does not
+start persistent application processes or allocate service ports; services
+remain logical `ServiceId` identities whose immutable artifacts are executed
+on shared PitFast infrastructure.
+
+Manifest selection is deterministic and shared by `pit up`, `pit build`,
+`pit doctor`, `pit deploy`, and `pit config show`:
+
+1. `--file/-f` always wins and must name an existing `.pit` file.
+2. Otherwise only `./*.pit` in the current directory is considered.
+3. One file is selected regardless of its name.
+4. Multiple files select `app.pit` when present; otherwise the command fails
+   with `AmbiguousManifest` and lists the files.
+
+Paths such as `build = "../api"` are resolved relative to the selected
+manifest, never relative to a caller's process directory or a parent
+directory. `pit config show -f path/to/prod.pit` prints the normalized plan.
+
+The legacy `pit.toml` remains a per-project build/defaults compatibility
+layer for existing single-project workflows. A manifest can override those
+defaults per service; new application projects need only one `.pit` file.
+
+```bash
+pit init
+pit doctor
+pit up
+pit up --file prod.pit
+pit build --file app.pit api
+pit deploy --file prod.pit
+pit config show --file app.pit
+```
+
+Resources in a manifest are external capability bindings, not PitFast
+workloads. Routes target logical services, and service-to-service calls keep
+using `pit://service-id/...`; manifests contain no container, replica,
+network, or service-port model.
+
+## Legacy single-project workflow
 
 From any unambiguous supported project:
 
