@@ -44,15 +44,25 @@ pub async fn snapshot(args: EndpointArgs) -> Result<()> {
 
 pub async fn list(args: EndpointArgs) -> Result<()> {
     let snapshot = get_snapshot(&args.endpoint).await?;
-    println!("GARAGE      STATUS    LANES  ACTIVE  QUEUE");
+    println!("GARAGE      STATUS    LANES  ACTIVE  QUEUE  COLD  WARM  HOT");
     for garage in snapshot.garages {
+        let cold = garage
+            .local_artifacts
+            .iter()
+            .filter(|digest| {
+                !garage.warm_artifacts.contains(digest) && !garage.hot_artifacts.contains(digest)
+            })
+            .count();
         println!(
-            "{:<10}  {:<8}  {:>5}  {:>6}  {:>5}",
+            "{:<10}  {:<8}  {:>5}  {:>6}  {:>5}  {:>4}  {:>4}  {:>4}",
             garage.id,
             format!("{:?}", garage.health).to_lowercase(),
             garage.total_lanes,
             garage.active_lanes,
-            garage.queue_depth
+            garage.queue_depth,
+            cold,
+            garage.warm_artifacts.len(),
+            garage.hot_artifacts.len()
         );
     }
     Ok(())
@@ -78,6 +88,15 @@ pub async fn inspect(args: GarageInspectArgs) -> Result<()> {
     println!();
     println!("Artifacts");
     println!("  Local: {}", garage.local_artifacts.len());
-    println!("  Prepared: {}", garage.prepared_artifacts.len());
+    let cold = garage
+        .local_artifacts
+        .iter()
+        .filter(|digest| {
+            !garage.warm_artifacts.contains(digest) && !garage.hot_artifacts.contains(digest)
+        })
+        .count();
+    println!("  Cold: {}", cold);
+    println!("  Warm: {}", garage.warm_artifacts.len());
+    println!("  Hot: {}", garage.hot_artifacts.len());
     Ok(())
 }
