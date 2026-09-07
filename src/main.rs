@@ -20,6 +20,8 @@ enum Command {
     Init(commands::init::InitArgs),
     /// Build, deploy, and prepare a Pit Manifest application.
     Up(commands::up::UpArgs),
+    /// Resolve and validate an application plan without side effects.
+    Plan(commands::plan::PlanArgs),
     /// Inspect the effective Pit Manifest/application plan.
     Config {
         #[command(subcommand)]
@@ -74,6 +76,12 @@ enum Command {
     Deploy(commands::deploy::DeployArgs),
     /// Roll a service back to a previous immutable revision.
     Rollback(commands::deploy::RollbackArgs),
+    /// List coherent application releases, newest first.
+    Releases {
+        application: String,
+        #[arg(long, default_value = "http://127.0.0.1:7081")]
+        control_endpoint: String,
+    },
     /// Stop routing new requests to a service without deleting history.
     Undeploy(commands::deploy::UndeployArgs),
     /// Inspect Circuit membership and Garage capacity.
@@ -140,6 +148,7 @@ async fn main() -> Result<()> {
         Command::Build(args) => commands::build::run(args).await,
         Command::Init(args) => commands::init::run(args),
         Command::Up(args) => commands::up::run(args).await,
+        Command::Plan(args) => commands::plan::run(args),
         Command::Config { command } => match command {
             commands::config::ConfigCommand::Show(args) => commands::config::show(args),
         },
@@ -173,6 +182,10 @@ async fn main() -> Result<()> {
         },
         Command::Deploy(args) => commands::deploy::deploy(args).await,
         Command::Rollback(args) => commands::deploy::rollback(args).await,
+        Command::Releases {
+            application,
+            control_endpoint,
+        } => commands::deploy::application_releases_command(application, control_endpoint).await,
         Command::Undeploy(args) => commands::deploy::undeploy(args).await,
         Command::Circuit { command } => match command {
             CircuitCommand::Status(args) => commands::circuit::status(args).await,

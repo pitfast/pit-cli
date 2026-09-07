@@ -296,3 +296,16 @@ CPython snapshot is not byte-for-byte deterministic across forced rebuilds.
 Normal fingerprint cache reuse remains stable, but `pit build --force` may
 produce a different Python artifact digest; PitFast reports this limitation
 rather than treating the outputs as reproducible.
+# Pit Manifest lifecycle
+
+`pit up` resolves one `*.pit` manifest, builds and prepares every service,
+then publishes one coherent application release. A sole manifest may use any
+filename; when several are present `app.pit` is the conventional default and
+otherwise `--file` is required. Paths in a manifest are relative to that
+manifest.
+
+The release contains logical service-to-`ArtifactDigest` mappings, routes, and
+resource bindings. It does not create processes, replicas, ports, or a
+container network. Inspect a side-effect-free plan with `pit plan`, list
+history with `pit releases APP`, and roll back a whole application with
+`pit rollback --application APP`.

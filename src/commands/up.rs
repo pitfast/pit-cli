@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
@@ -67,7 +68,6 @@ pub async fn run(args: UpArgs) -> Result<()> {
         }
     }
 
-    let mut built = Vec::new();
     for service in &plan.services {
         let outcome = build::build_service(&plan, service, profile, args.force)
             .await
@@ -91,7 +91,6 @@ pub async fn run(args: UpArgs) -> Result<()> {
                 outcome.artifact.manifest.runtime.entrypoint.as_str()
             );
         }
-        built.push(service);
     }
 
     if !plan.resources.is_empty() {
@@ -108,30 +107,64 @@ pub async fn run(args: UpArgs) -> Result<()> {
     }
 
     println!("\nDeployment");
-    for service in built {
+    let mut services = BTreeMap::new();
+    for service in &plan.services {
         let bindings = service
             .spec
             .resources
             .iter()
             .map(|(variable, resource)| (variable.clone(), resource.clone()))
             .collect();
-        deploy::deploy_local_project(
+        let prepared = deploy::prepare_local_release_service(
             &service.id,
             &service.project_dir,
-            &args.control_endpoint,
             args.artifact_store.clone(),
-            args.force,
             bindings,
         )
         .await
         .with_context(|| {
             format!(
-                "failed to activate service '{}'; builds are complete but deployment apply stopped",
+                "failed to prepare service '{}'; no application release was activated",
                 service.id
             )
         })?;
-        println!("  ✓ {} ready", service.id);
+        services.insert(service.id.to_string(), prepared);
+        println!("  ✓ {} prepared", service.id);
     }
+    let routes = plan
+        .routes
+        .iter()
+        .map(|(path, service)| (path.clone(), service.to_string()))
+        .collect();
+    let resource_bindings = plan
+        .services
+        .iter()
+        .map(|service| {
+            (
+                service.id.to_string(),
+                service
+                    .spec
+                    .resources
+                    .iter()
+                    .map(|(variable, resource)| (variable.clone(), resource.clone()))
+                    .collect(),
+            )
+        })
+        .collect();
+    let release = deploy::activate_application_release(
+        &args.control_endpoint,
+        pit_deployment::ApplicationReleaseRequest {
+            application_id: plan.application_name.clone(),
+            manifest_digest: plan.manifest.digest.clone(),
+            services,
+            routes,
+            resource_bindings,
+            metadata: BTreeMap::new(),
+        },
+    )
+    .await
+    .context("failed to atomically activate application release")?;
+    println!("  ✓ application release {} active", release.release_id);
     println!("\n✓ Pit application ready");
     Ok(())
 }

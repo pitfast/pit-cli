@@ -9,6 +9,7 @@ pub mod doctor;
 pub mod init;
 pub mod inspect;
 pub mod paddock;
+pub mod plan;
 pub mod resource;
 pub mod run;
 pub mod system;

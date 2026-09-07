@@ -4,8 +4,9 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::Args;
 use pit_artifact::ArtifactManifest;
 use pit_deployment::{
-    ArtifactAcquirer, DeployRequest, DeploymentStageDurations, DeploymentView, LocalArtifactStore,
-    RollbackRequest, UndeployRequest,
+    ApplicationRelease, ApplicationReleaseRequest, ApplicationReleaseService,
+    ApplicationRollbackRequest, ArtifactAcquirer, DeployRequest, DeploymentStageDurations,
+    DeploymentView, LocalArtifactStore, RollbackRequest, UndeployRequest,
 };
 use pit_lane_core::ServiceId;
 use pit_paddock_core::{ArtifactDigest, PaddockRef, PaddockRefWire};
@@ -42,7 +43,9 @@ pub struct DeployArgs {
 
 #[derive(Debug, Args)]
 pub struct RollbackArgs {
-    pub service: String,
+    pub service: Option<String>,
+    #[arg(long, conflicts_with = "service")]
+    pub application: Option<String>,
     #[arg(long)]
     pub generation: Option<u64>,
     #[arg(long)]
@@ -230,16 +233,12 @@ pub async fn deploy(args: DeployArgs) -> Result<()> {
     Ok(())
 }
 
-/// Apply one already-built service from an application plan. `pit up` uses
-/// this shared deployment primitive so build and deploy do not diverge.
-pub async fn deploy_local_project(
-    service: &ServiceId,
+pub async fn prepare_local_release_service(
+    _service: &ServiceId,
     project_dir: &Path,
-    control_endpoint: &str,
     artifact_store: Option<PathBuf>,
-    force: bool,
     resource_bindings: Vec<(String, String)>,
-) -> Result<DeploymentView> {
+) -> Result<ApplicationReleaseService> {
     let store = LocalArtifactStore::new(match artifact_store {
         Some(path) => path,
         None => LocalArtifactStore::default_root()?,
@@ -250,35 +249,77 @@ pub async fn deploy_local_project(
     let bytes = tokio::fs::read(&artifact_path).await?;
     let (artifact_path, manifest_path) = store.install(&manifest, &bytes)?;
     let digest: ArtifactDigest = format!("sha256:{}", manifest.artifact.sha256).parse()?;
-    let initial_generation = if force {
-        None
-    } else {
-        Some(current_generation(control_endpoint, service).await?)
-    };
+    Ok(ApplicationReleaseService {
+        digest,
+        artifact_path: artifact_path.to_string_lossy().into_owned(),
+        manifest_path: manifest_path.to_string_lossy().into_owned(),
+        resource_bindings,
+    })
+}
+
+pub async fn activate_application_release(
+    control_endpoint: &str,
+    request: ApplicationReleaseRequest,
+) -> Result<ApplicationRelease> {
     post_json(
         control_endpoint,
-        "/v1/deploy",
-        &DeployRequest {
-            service_id: service.to_string(),
-            digest,
-            artifact_path: artifact_path.to_string_lossy().into_owned(),
-            manifest_path: manifest_path.to_string_lossy().into_owned(),
-            source_ref: None,
-            source_paddock: None,
-            expected_generation: initial_generation,
-            force,
-            stage_durations: None,
-            resource_bindings,
-        },
+        "/v1/application-release/activate",
+        &request,
+    )
+    .await
+}
+
+pub async fn application_releases(
+    control_endpoint: &str,
+    application_id: &str,
+) -> Result<Vec<ApplicationRelease>> {
+    get_json(
+        control_endpoint,
+        &format!("/v1/applications/{application_id}/releases"),
+    )
+    .await
+}
+
+pub async fn active_application_release(
+    control_endpoint: &str,
+    application_id: &str,
+) -> Result<ApplicationRelease> {
+    get_json(
+        control_endpoint,
+        &format!("/v1/applications/{application_id}"),
     )
     .await
 }
 
 pub async fn rollback(args: RollbackArgs) -> Result<()> {
+    if let Some(application_id) = args.application.as_deref() {
+        if args.generation.is_some() {
+            bail!("application rollback uses --to with a release id, not --generation")
+        }
+        let release: ApplicationRelease = post_json(
+            &args.control_endpoint,
+            "/v1/application-release/rollback",
+            &ApplicationRollbackRequest {
+                application_id: application_id.to_owned(),
+                release_id: args.to.as_deref().map(str::parse).transpose()?,
+            },
+        )
+        .await
+        .context("application rollback failed")?;
+        println!(
+            "✓ Application {} rolled back to release {}",
+            application_id, release.release_id
+        );
+        return Ok(());
+    }
     if args.generation.is_some() && args.to.is_some() {
         bail!("use only one of --generation or --to")
     }
-    let service: ServiceId = args.service.parse()?;
+    let service_name = args
+        .service
+        .as_deref()
+        .ok_or_else(|| anyhow!("provide a service or --application"))?;
+    let service: ServiceId = service_name.parse()?;
     let current: DeploymentView =
         get_json(&args.control_endpoint, &format!("/v1/services/{service}"))
             .await
@@ -334,7 +375,7 @@ pub async fn rollback(args: RollbackArgs) -> Result<()> {
         &args.control_endpoint,
         "/v1/rollback",
         &RollbackRequest {
-            service_id: args.service,
+            service_id: service.to_string(),
             target_generation: args.generation,
             target_digest: target_digest.clone(),
             expected_generation: args.expected_generation.or(Some(current.state.generation)),
@@ -391,6 +432,27 @@ pub async fn service_list(args: ServiceListArgs) -> Result<()> {
         println!(
             "{}\t{:?}\t{}\t{}\t{}",
             view.state.service_id, view.status, view.state.generation, digest, source
+        );
+    }
+    Ok(())
+}
+
+pub async fn application_releases_command(
+    application_id: String,
+    control_endpoint: String,
+) -> Result<()> {
+    let releases = application_releases(&control_endpoint, &application_id).await?;
+    let active = active_application_release(&control_endpoint, &application_id)
+        .await?
+        .release_id;
+    println!("RELEASE\tACTIVE\tMANIFEST\tSERVICES");
+    for release in releases {
+        println!(
+            "{}\t{}\t{}\t{}",
+            release.release_id,
+            active == release.release_id,
+            release.manifest_digest,
+            release.services.len()
         );
     }
     Ok(())
