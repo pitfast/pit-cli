@@ -19,6 +19,18 @@ pub struct BuildArgs {
     /// Select the source language, overriding pit.toml and detection.
     #[arg(long)]
     pub language: Option<Language>,
+    /// Select the application interface, for example asgi or wasi-http.
+    #[arg(long)]
+    pub interface: Option<pit_crew::ApplicationInterface>,
+    /// Application entrypoint, for example main:app.
+    #[arg(long)]
+    pub entry: Option<String>,
+    /// Select a built-in adapter id or a project-local adapter directory.
+    #[arg(long)]
+    pub adapter: Option<String>,
+    /// Validate and package an already-built compatible WASM Component.
+    #[arg(long)]
+    pub artifact: Option<PathBuf>,
     /// Select a binary target when the project has more than one.
     #[arg(long)]
     pub bin: Option<String>,
@@ -34,6 +46,20 @@ pub struct BuildArgs {
     /// Select the standard P2 component world.
     #[arg(long, requires = "abi")]
     pub world: Option<ComponentWorld>,
+}
+
+pub fn default_crew() -> PitCrew {
+    PitCrew::with_default_adapters(vec![
+        Arc::new(RustBuilder::new()) as Arc<dyn LanguageBuilder>,
+        Arc::new(GoBuilder::new()),
+        Arc::new(NativeBuilder::c()),
+        Arc::new(NativeBuilder::cpp()),
+        Arc::new(JsBuilder::javascript()),
+        Arc::new(JsBuilder::typescript()),
+        Arc::new(PythonBuilder::new()),
+        Arc::new(ExperimentalBuilder::csharp()),
+        Arc::new(ExperimentalBuilder::java()),
+    ])
 }
 
 pub async fn run(args: BuildArgs) -> Result<()> {
@@ -58,18 +84,13 @@ pub async fn run(args: BuildArgs) -> Result<()> {
         execution_defaults: defaults,
         force: args.force,
         language: args.language.or(config.build.language),
+        application_interface: args.interface.or(config.build.interface),
+        entrypoint: args.entry.or(config.build.entry),
+        adapter: args.adapter.or(config.build.adapter),
+        adapter_workspace: None,
+        raw_artifact: args.artifact,
     };
-    let crew = PitCrew::new(vec![
-        Arc::new(RustBuilder::new()) as Arc<dyn LanguageBuilder>,
-        Arc::new(GoBuilder::new()),
-        Arc::new(NativeBuilder::c()),
-        Arc::new(NativeBuilder::cpp()),
-        Arc::new(JsBuilder::javascript()),
-        Arc::new(JsBuilder::typescript()),
-        Arc::new(PythonBuilder::new()),
-        Arc::new(ExperimentalBuilder::csharp()),
-        Arc::new(ExperimentalBuilder::java()),
-    ]);
+    let crew = default_crew();
     let outcome = crew.build_with_status(request).await?;
     let artifact = outcome.artifact;
     let display_path = artifact
@@ -87,6 +108,12 @@ pub async fn run(args: BuildArgs) -> Result<()> {
     );
     println!("Target: {}", artifact.manifest.build.target);
     println!("Profile: {}", artifact.manifest.build.profile.as_str());
+    if let Some(interface) = &artifact.manifest.build.application_interface {
+        println!("Interface: {interface}");
+    }
+    if let Some(adapter) = &artifact.manifest.build.adapter {
+        println!("Adapter: {adapter}");
+    }
     if let Some(world) = artifact.manifest.runtime.world {
         println!("World: {}", world.as_str());
     }

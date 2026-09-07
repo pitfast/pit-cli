@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use pit_artifact::{ComponentWorld, ExecutionDefaults, RuntimeAbi};
-use pit_crew::Language;
+use pit_crew::{ApplicationInterface, Language};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -28,6 +28,9 @@ pub struct ProjectSection {
 #[serde(default)]
 pub struct BuildSection {
     pub language: Option<Language>,
+    pub interface: Option<ApplicationInterface>,
+    pub entry: Option<String>,
+    pub adapter: Option<String>,
     pub bin: Option<String>,
     pub abi: Option<RuntimeAbi>,
     pub world: Option<ComponentWorld>,
@@ -96,7 +99,13 @@ pub fn execution_defaults(config: &ProjectConfig) -> Result<ExecutionDefaults> {
     })
 }
 
-pub fn init(project_dir: &Path, language: Language) -> Result<bool> {
+pub fn init_with_options(
+    project_dir: &Path,
+    language: Language,
+    interface: Option<&ApplicationInterface>,
+    entry: Option<&str>,
+    adapter: Option<&str>,
+) -> Result<bool> {
     let marker = match language {
         Language::Rust => "Cargo.toml",
         Language::Go => "go.mod",
@@ -117,12 +126,22 @@ pub fn init(project_dir: &Path, language: Language) -> Result<bool> {
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("pitfast-project");
-        fs::write(
-            &config,
-            format!(
-                "[project]\nname = \"{name}\"\n\n[build]\nlanguage = \"{language}\"\nabi = \"wasi-preview2\"\n# bin = \"binary-name\"\n\n[execution]\n# timeout = \"2s\"\n# memory = \"64MiB\"\n"
-            ),
-        )?;
+        let mut contents = format!(
+            "[project]\nname = \"{name}\"\n\n[build]\nlanguage = \"{language}\"\nabi = \"wasi-preview2\"\n"
+        );
+        if let Some(interface) = interface {
+            contents.push_str(&format!("interface = \"{interface}\"\n"));
+        }
+        if let Some(entry) = entry {
+            contents.push_str(&format!("entry = \"{entry}\"\n"));
+        }
+        if let Some(adapter) = adapter {
+            contents.push_str(&format!("adapter = \"{adapter}\"\n"));
+        }
+        contents.push_str(
+            "# bin = \"binary-name\"\n\n[execution]\n# timeout = \"2s\"\n# memory = \"64MiB\"\n",
+        );
+        fs::write(&config, contents)?;
         true
     };
     ensure_gitignore(project_dir)?;
@@ -134,7 +153,9 @@ fn project_has_marker(project_dir: &Path, language: Language) -> bool {
         Language::Rust => project_dir.join("Cargo.toml").is_file(),
         Language::Go => project_dir.join("go.mod").is_file(),
         Language::Python => {
-            project_dir.join("pyproject.toml").is_file() || project_dir.join("setup.py").is_file()
+            project_dir.join("pyproject.toml").is_file()
+                || project_dir.join("requirements.txt").is_file()
+                || project_dir.join("setup.py").is_file()
         }
         Language::JavaScript | Language::TypeScript => project_dir.join("package.json").is_file(),
         Language::C | Language::Cpp => {
@@ -214,7 +235,7 @@ fn parse_memory_bytes(value: &str) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ProjectConfig, execution_defaults, init, load};
+    use super::{ProjectConfig, execution_defaults, init_with_options, load};
     use pit_artifact::RuntimeAbi;
     use std::fs;
 
@@ -223,8 +244,8 @@ mod tests {
         let project = std::env::temp_dir().join(format!("pit-project-{}", std::process::id()));
         fs::create_dir_all(&project).unwrap();
         fs::write(project.join("Cargo.toml"), "[package]\nname=\"x\"\n").unwrap();
-        assert!(init(&project, pit_crew::Language::Rust).unwrap());
-        assert!(!init(&project, pit_crew::Language::Rust).unwrap());
+        assert!(init_with_options(&project, pit_crew::Language::Rust, None, None, None).unwrap());
+        assert!(!init_with_options(&project, pit_crew::Language::Rust, None, None, None).unwrap());
         let config = load(&project).unwrap();
         assert_eq!(
             config.project.name.as_deref(),

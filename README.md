@@ -150,6 +150,35 @@ tags are never re-resolved. `--paddock-dir` is an explicit filesystem override,
 useful for offline tests. Remote acquisition has a bounded 30-second timeout
 and three attempts. Paddock is never contacted on the request hot path.
 
+## Application interfaces and adoption
+
+`pit init` is interface-first. It reports the language, application interface,
+entrypoint, framework hint, and evidence used by the detector. A detector is a
+convenience hint only; it is not required to build an application.
+
+```bash
+pit init --dry-run
+pit init --language python --interface asgi --entry main:app
+pit doctor
+pit build --language python --interface asgi --entry main:app
+```
+
+The Python ASGI adapter bridges any compatible ASGI application to
+`wasi:http/proxy`; the PitFast runtime does not know the framework name. A
+project-local declarative adapter can be selected with
+`--adapter ./pit-adapters/<name>` and can introduce a new interface without a
+PitCrew source change. It may list generated source assets, but v0.11 does not
+execute arbitrary downloaded native plugins.
+
+Already-built Components bypass all source detection:
+
+```bash
+pit build --artifact ./dist/app.wasm --abi wasi-preview2 --world wasi:http/proxy
+```
+
+The artifact is still validated and enters the normal manifest, Paddock, and
+deployment lifecycle.
+
 ## Language status
 
 After build time the runtime is language-neutral: PitBox sees only the
