@@ -6,7 +6,7 @@ mod manifest;
 mod project;
 
 #[derive(Debug, Parser)]
-#[command(name = "pit", about = "PitFast developer CLI")]
+#[command(name = "pit", version, about = "PitFast developer CLI")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -131,6 +131,8 @@ enum GarageCommand {
 #[derive(Debug, Subcommand)]
 pub(crate) enum DoctorCommand {
     Languages,
+    /// Inspect the local PitFast runtime and optional build toolchains.
+    System,
 }
 
 #[tokio::main]

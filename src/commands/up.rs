@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
@@ -25,12 +26,18 @@ pub struct UpArgs {
     /// Use Cargo debug/source builder profiles where applicable.
     #[arg(long)]
     pub debug: bool,
+    /// Print a control-plane timing breakdown for this activation.
+    #[arg(long)]
+    pub timings: bool,
 }
 
 pub async fn run(args: UpArgs) -> Result<()> {
+    let lifecycle_started = Instant::now();
     let cwd = std::env::current_dir()?;
+    let resolve_started = Instant::now();
     let resolved = crate::manifest::resolve(&cwd, args.file.as_deref())?;
     let plan = resolved.plan()?;
+    let resolve_ms = resolve_started.elapsed().as_millis();
     let profile = if args.debug {
         BuildProfile::Debug
     } else {
@@ -49,6 +56,7 @@ pub async fn run(args: UpArgs) -> Result<()> {
     // Preflight every service before any build or deployment side effect.
     // This prevents an incompatible later service from activating an earlier
     // service merely because it happened to be listed first.
+    let doctor_started = Instant::now();
     for service in &plan.services {
         let request = build::request_for_service(&plan, service, profile, args.force)?;
         if let Some(report) = crew.compatibility(&service.project_dir, &request)?
@@ -67,7 +75,9 @@ pub async fn run(args: UpArgs) -> Result<()> {
             ));
         }
     }
+    let doctor_ms = doctor_started.elapsed().as_millis();
 
+    let build_started = Instant::now();
     for service in &plan.services {
         let outcome = build::build_service(&plan, service, profile, args.force)
             .await
@@ -92,6 +102,7 @@ pub async fn run(args: UpArgs) -> Result<()> {
             );
         }
     }
+    let build_ms = build_started.elapsed().as_millis();
 
     if !plan.resources.is_empty() {
         println!("\nResources");
@@ -107,6 +118,7 @@ pub async fn run(args: UpArgs) -> Result<()> {
     }
 
     println!("\nDeployment");
+    let prepare_started = Instant::now();
     let mut services = BTreeMap::new();
     for service in &plan.services {
         let bindings = service
@@ -131,6 +143,7 @@ pub async fn run(args: UpArgs) -> Result<()> {
         services.insert(service.id.to_string(), prepared);
         println!("  ✓ {} prepared", service.id);
     }
+    let prepare_ms = prepare_started.elapsed().as_millis();
     let routes = plan
         .routes
         .iter()
@@ -151,7 +164,8 @@ pub async fn run(args: UpArgs) -> Result<()> {
             )
         })
         .collect();
-    let release = deploy::activate_application_release(
+    let activation_started = Instant::now();
+    let activation = deploy::activate_application_release(
         &args.control_endpoint,
         pit_deployment::ApplicationReleaseRequest {
             application_id: plan.application_name.clone(),
@@ -164,7 +178,48 @@ pub async fn run(args: UpArgs) -> Result<()> {
     )
     .await
     .context("failed to atomically activate application release")?;
-    println!("  ✓ application release {} active", release.release_id);
+    println!(
+        "  ✓ application release {} active",
+        activation.release.release_id
+    );
     println!("\n✓ Pit application ready");
+    if args.timings {
+        println!("\nPit up timings");
+        println!("  Resolve:        {resolve_ms} ms");
+        println!("  Doctor:         {doctor_ms} ms");
+        println!("  Build:          {build_ms} ms");
+        println!("  Local prepare:  {prepare_ms} ms");
+        println!(
+            "  Activation HTTP: {} ms",
+            activation_started.elapsed().as_millis()
+        );
+        println!("  Validation:     {} ms", activation.timings.validation_ms);
+        println!(
+            "  Artifact verify:{} ms",
+            activation.timings.artifact_verification_ms
+        );
+        println!(
+            "  PitBox prepare: {} ms",
+            activation.timings.artifact_preparation_ms
+        );
+        println!(
+            "  Release persist:{} ms",
+            activation.timings.release_persistence_ms
+        );
+        println!(
+            "  Snapshot publish: {} ms",
+            activation.timings.snapshot_publication_ms
+        );
+        println!(
+            "  Prepared hits:   {}",
+            activation.timings.prepared_cache_hits
+        );
+        println!("  Cold compiles:   {}", activation.timings.cold_compiles);
+        println!("  Warm restores:   {}", activation.timings.warm_restores);
+        println!(
+            "  Total:           {} ms",
+            lifecycle_started.elapsed().as_millis()
+        );
+    }
     Ok(())
 }

@@ -4,9 +4,9 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::Args;
 use pit_artifact::ArtifactManifest;
 use pit_deployment::{
-    ApplicationRelease, ApplicationReleaseRequest, ApplicationReleaseService,
-    ApplicationRollbackRequest, ArtifactAcquirer, DeployRequest, DeploymentStageDurations,
-    DeploymentView, LocalArtifactStore, RollbackRequest, UndeployRequest,
+    ApplicationRelease, ApplicationReleaseActivation, ApplicationReleaseRequest,
+    ApplicationReleaseService, ApplicationRollbackRequest, ArtifactAcquirer, DeployRequest,
+    DeploymentStageDurations, DeploymentView, LocalArtifactStore, RollbackRequest, UndeployRequest,
 };
 use pit_lane_core::ServiceId;
 use pit_paddock_core::{ArtifactDigest, PaddockRef, PaddockRefWire};
@@ -109,6 +109,7 @@ pub async fn deploy(args: DeployArgs) -> Result<()> {
             artifact_store: args.artifact_store,
             force: args.force,
             debug: false,
+            timings: false,
         })
         .await;
     }
@@ -260,7 +261,7 @@ pub async fn prepare_local_release_service(
 pub async fn activate_application_release(
     control_endpoint: &str,
     request: ApplicationReleaseRequest,
-) -> Result<ApplicationRelease> {
+) -> Result<ApplicationReleaseActivation> {
     post_json(
         control_endpoint,
         "/v1/application-release/activate",

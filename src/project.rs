@@ -146,6 +146,14 @@ pub fn init_with_options(
         if let Some(adapter) = adapter {
             contents.push_str(&format!("adapter = \"{adapter}\"\n"));
         }
+        if interface.is_some_and(|value| {
+            matches!(
+                value.as_str(),
+                "asgi" | "fetch" | "net-http" | "static-web" | "wasi-http"
+            )
+        }) {
+            contents.push_str(&format!("\n[routes]\n\"/\" = \"{name}\"\n"));
+        }
         contents.push_str(
             "# interface = \"asgi\"\n# entry = \"main:app\"\n# adapter = \"python/asgi\"\n\n[execution]\n# timeout = \"2s\"\n# memory = \"64MiB\"\n",
         );

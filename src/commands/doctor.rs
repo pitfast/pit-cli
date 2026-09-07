@@ -7,6 +7,8 @@ use pit_builder_native::NativeBuilder;
 use pit_builder_python::PythonBuilder;
 use pit_builder_rust::RustBuilder;
 use pit_crew::{ApplicationInterface, Language, LanguageBuilder};
+use serde_json::Value;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::DoctorCommand;
@@ -17,8 +19,10 @@ pub async fn run(
     verbose: bool,
     file: Option<PathBuf>,
 ) -> Result<()> {
-    if command.is_none() {
-        return project_doctor(json, verbose, file.as_deref());
+    match command {
+        None => return project_doctor(json, verbose, file.as_deref()),
+        Some(DoctorCommand::System) => return system_doctor(json),
+        Some(DoctorCommand::Languages) => {}
     }
     println!("LANGUAGE      TOOLCHAIN                 STATUS");
     for language in Language::ALL {
@@ -26,6 +30,73 @@ pub async fn run(
         println!("{:<13} {:<42} {}", language.as_str(), toolchain, status);
     }
     Ok(())
+}
+
+fn system_doctor(json: bool) -> Result<()> {
+    let checks = [
+        ("node", command_version("node", &["--version"])),
+        ("npm", command_version("npm", &["--version"])),
+        ("pnpm", command_version("pnpm", &["--version"])),
+        ("cargo", command_version("cargo", &["--version"])),
+        ("go", command_version("go", &["version"])),
+        ("python", command_version("python3", &["--version"])),
+    ];
+    if json {
+        let output = serde_json::json!({
+            "schema_version": 1,
+            "os": std::env::consts::OS,
+            "architecture": std::env::consts::ARCH,
+            "pitfast": env!("CARGO_PKG_VERSION"),
+            "runtime": {
+                "cli": "available",
+                "local_pitlane": "managed by the selected local deployment",
+                "local_pitbox": "managed by PitLane",
+            },
+            "build_toolchains": checks.iter().map(|(name, version)| {
+                serde_json::json!({"name": name, "available": version.is_some(), "version": version})
+            }).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        return Ok(());
+    }
+    println!("PitFast System Doctor");
+    println!("\nHost");
+    println!("  OS: {}", std::env::consts::OS);
+    println!("  Architecture: {}", std::env::consts::ARCH);
+    println!("  PitFast CLI: {}", env!("CARGO_PKG_VERSION"));
+    println!("\nRuntime");
+    println!("  ✓ PitFast CLI");
+    println!("  ✓ local PitLane/PitBox integration available");
+    println!("\nBuild toolchains");
+    for (name, version) in checks {
+        match version {
+            Some(version) => println!("  ✓ {name}: {version}"),
+            None => println!("  ? {name}: not found (only required by projects using it)"),
+        }
+    }
+    println!("\nCache");
+    println!(
+        "  PIT cache root: {}",
+        std::env::var("PIT_CACHE_ROOT").unwrap_or_else(|_| "default local cache".into())
+    );
+    Ok(())
+}
+
+fn command_version(command: &str, args: &[&str]) -> Option<String> {
+    std::process::Command::new(command)
+        .args(args)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| {
+            String::from_utf8_lossy(if output.stdout.is_empty() {
+                &output.stderr
+            } else {
+                &output.stdout
+            })
+            .trim()
+            .to_string()
+        })
 }
 
 fn project_doctor(json: bool, verbose: bool, file: Option<&Path>) -> Result<()> {
@@ -210,6 +281,7 @@ fn manifest_doctor(
             "entrypoint": request.entrypoint,
             "adapter": request.adapter,
             "evidence": candidates.iter().flat_map(|candidate| candidate.evidence.clone()).collect::<Vec<_>>(),
+            "frontend": frontend_report(&service.project_dir, request.application_interface.as_ref()),
             "compatibility": report,
         }));
     }
@@ -252,6 +324,22 @@ fn manifest_doctor(
             if let Some(adapter) = request.adapter {
                 println!("  adapter: {adapter}");
             }
+            if let Some(frontend) =
+                frontend_report(&service.project_dir, request.application_interface.as_ref())
+            {
+                println!("  mode: {}", frontend["mode"].as_str().unwrap_or("static"));
+                println!(
+                    "  build command: {}",
+                    frontend["build_command"].as_str().unwrap_or("not declared")
+                );
+                println!(
+                    "  output: {}",
+                    frontend["output"].as_str().unwrap_or("not built")
+                );
+                if let Some(framework) = frontend["framework_hint"].as_str() {
+                    println!("  framework hint: {framework}");
+                }
+            }
             if let Some(report) = report {
                 println!("  compatibility: {:?}", report.status);
                 for finding in report.findings {
@@ -275,6 +363,62 @@ fn manifest_doctor(
         anyhow::bail!("Pit Manifest compatibility has confirmed service blockers");
     }
     Ok(())
+}
+
+fn frontend_report(project_dir: &Path, interface: Option<&ApplicationInterface>) -> Option<Value> {
+    if interface?.as_str() != "static-web" {
+        return None;
+    }
+    let package_path = project_dir.join("package.json");
+    let package: Value = serde_json::from_str(&fs::read_to_string(package_path).ok()?).ok()?;
+    let scripts = package.get("scripts");
+    let build_command = scripts
+        .and_then(|scripts| scripts.get("build"))
+        .and_then(Value::as_str)
+        .map(|script| format!("package.json#build ({script})"))
+        .unwrap_or_else(|| "not declared".into());
+    let output = ["dist", "build", "out", ".output/public"]
+        .into_iter()
+        .map(|candidate| project_dir.join(candidate))
+        .find(|candidate| candidate.is_dir())
+        .map(|candidate| {
+            candidate
+                .strip_prefix(project_dir)
+                .unwrap_or(&candidate)
+                .display()
+                .to_string()
+        })
+        .unwrap_or_else(|| "not built".into());
+    let mut packages = Vec::new();
+    for section in ["dependencies", "devDependencies"] {
+        if let Some(object) = package.get(section).and_then(Value::as_object) {
+            packages.extend(object.keys().cloned());
+        }
+    }
+    let framework_hint = [
+        ("@angular/core", "Angular"),
+        ("@sveltejs/kit", "SvelteKit"),
+        ("next", "Next.js"),
+        ("nuxt", "Nuxt"),
+        ("astro", "Astro"),
+        ("svelte", "Svelte"),
+        ("vue", "Vue"),
+        ("react", "React"),
+        ("solid-js", "Solid"),
+        ("preact", "Preact"),
+        ("vite", "Vite"),
+    ]
+    .into_iter()
+    .find(|(package_name, _)| packages.iter().any(|package| package == package_name))
+    .map(|(_, name)| name);
+    let mut report = serde_json::Map::new();
+    report.insert("mode".into(), Value::String("static".into()));
+    report.insert("build_command".into(), Value::String(build_command));
+    report.insert("output".into(), Value::String(output));
+    if let Some(framework) = framework_hint {
+        report.insert("framework_hint".into(), Value::String(framework.into()));
+    }
+    Some(Value::Object(report))
 }
 
 fn capability_report(
