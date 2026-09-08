@@ -6,7 +6,10 @@ use pit_builder_js::JsBuilder;
 use pit_builder_native::NativeBuilder;
 use pit_builder_python::PythonBuilder;
 use pit_builder_rust::RustBuilder;
-use pit_crew::{ApplicationInterface, Language, LanguageBuilder};
+use pit_crew::{
+    ApplicationInterface, CompatibilityCertainty, CompatibilityFinding, CompatibilityReport,
+    CompatibilitySeverity, CompatibilityStatus, Language, LanguageBuilder,
+};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -140,9 +143,12 @@ fn project_doctor(json: bool, verbose: bool, file: Option<&Path>) -> Result<()> 
         ..pit_crew::BuildRequest::new(project_dir.clone())
     };
     let compatibility = if language.is_some() && interface.is_some() {
-        crew.compatibility(&project_dir, &request)?
+        merge_compatibility(
+            crew.compatibility(&project_dir, &request)?,
+            missing_toolchain_report(language),
+        )
     } else {
-        None
+        missing_toolchain_report(language)
     };
     let adapter_id = config.build.adapter.clone().or_else(|| {
         language.and_then(|language| {
@@ -270,7 +276,10 @@ fn manifest_doctor(
             false,
         )?;
         let candidates = crew.inspect(&service.project_dir)?;
-        let report = crew.compatibility(&service.project_dir, &request)?;
+        let report = merge_compatibility(
+            crew.compatibility(&service.project_dir, &request)?,
+            missing_toolchain_report(request.language),
+        );
         if report.as_ref().is_some_and(|value| value.blocks_build()) {
             blocked = true;
         }
@@ -310,7 +319,10 @@ fn manifest_doctor(
                 pit_artifact::BuildProfile::Release,
                 false,
             )?;
-            let report = crew.compatibility(&service.project_dir, &request)?;
+            let report = merge_compatibility(
+                crew.compatibility(&service.project_dir, &request)?,
+                missing_toolchain_report(request.language),
+            );
             println!("\n{}", service.id);
             println!("  build: {}", service.project_dir.display());
             println!(
@@ -363,6 +375,116 @@ fn manifest_doctor(
         anyhow::bail!("Pit Manifest compatibility has confirmed service blockers");
     }
     Ok(())
+}
+
+fn merge_compatibility(
+    base: Option<CompatibilityReport>,
+    toolchain: Option<CompatibilityReport>,
+) -> Option<CompatibilityReport> {
+    let Some(toolchain) = toolchain else {
+        return base;
+    };
+    let mut report = base.unwrap_or_else(|| CompatibilityReport {
+        status: CompatibilityStatus::Supported,
+        messages: Vec::new(),
+        findings: Vec::new(),
+    });
+    report.messages.extend(toolchain.messages);
+    report.findings.extend(toolchain.findings);
+    if report.findings.iter().any(|finding| finding.blocks_build) {
+        report.status = CompatibilityStatus::Unsupported;
+    }
+    Some(report)
+}
+
+fn missing_toolchain_report(language: Option<Language>) -> Option<CompatibilityReport> {
+    let language = language?;
+    let mut required = Vec::new();
+    match language {
+        Language::Rust => required.extend([("rustc", "install Rust from https://rustup.rs")]),
+        Language::Go => {
+            required.push(("go", "install Go from https://go.dev/dl/"));
+            required.push((
+                "componentize-go",
+                "install the Bytecode Alliance componentize-go tool",
+            ));
+        }
+        Language::Python => {
+            required.push(("python3", "install Python 3"));
+            required.push((
+                "componentize-py",
+                "install componentize-py in the build environment",
+            ));
+        }
+        Language::JavaScript => {
+            required.push(("node", "install a current Node.js release"));
+            required.push((
+                "componentize-js",
+                "install the supported ComponentizeJS tool",
+            ));
+        }
+        Language::TypeScript => {
+            required.push(("node", "install a current Node.js release"));
+            required.push(("tsc", "install TypeScript in the project or globally"));
+            required.push((
+                "componentize-js",
+                "install the supported ComponentizeJS tool",
+            ));
+        }
+        Language::C | Language::Cpp | Language::CSharp | Language::Java => {}
+    }
+    let missing = required
+        .into_iter()
+        .filter(|(command, _)| {
+            let command =
+                match *command {
+                    "componentize-go" => std::env::var("PITFAST_COMPONENTIZE_GO")
+                        .unwrap_or_else(|_| (*command).into()),
+                    "componentize-py" => std::env::var("PITFAST_COMPONENTIZE_PY")
+                        .unwrap_or_else(|_| (*command).into()),
+                    "componentize-js"
+                        if std::env::var_os("PITFAST_COMPONENTIZE_JS_SCRIPT").is_some() =>
+                    {
+                        return false;
+                    }
+                    "componentize-js" => (*command).into(),
+                    "tsc" => std::env::var("PITFAST_TSC").unwrap_or_else(|_| (*command).into()),
+                    _ => (*command).into(),
+                };
+            !command_available(&command)
+        })
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        return None;
+    }
+    Some(CompatibilityReport {
+        status: CompatibilityStatus::Unsupported,
+        messages: vec![format!(
+            "{} build toolchain requirement(s) are missing",
+            missing.len()
+        )],
+        findings: missing
+            .into_iter()
+            .map(|(command, recommendation)| CompatibilityFinding {
+                category: "missing-toolchain".into(),
+                severity: CompatibilitySeverity::Error,
+                certainty: CompatibilityCertainty::Confirmed,
+                package: Some(command.into()),
+                dependency_path: Vec::new(),
+                evidence: Vec::new(),
+                reason: format!("required build tool '{command}' was not found on PATH"),
+                recommendation: recommendation.into(),
+                blocks_build: true,
+            })
+            .collect(),
+    })
+}
+
+fn command_available(command: &str) -> bool {
+    std::process::Command::new(command)
+        .arg("--version")
+        .output()
+        .is_ok_and(|output| output.status.success())
 }
 
 fn frontend_report(project_dir: &Path, interface: Option<&ApplicationInterface>) -> Option<Value> {
