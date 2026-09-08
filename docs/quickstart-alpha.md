@@ -7,8 +7,8 @@ not start one process, port, or replica per manifest service.
 Install the published prerelease without cloning PitFast:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pitfast/pit-cli/v0.14.0-alpha.1/scripts/install-alpha.sh \
-  | bash -s -- --version 0.14.0-alpha.1
+curl -fsSL https://raw.githubusercontent.com/pitfast/pit-cli/v0.14.0-alpha.2/scripts/install-alpha.sh \
+  | bash -s -- --version 0.14.0-alpha.2
 export PATH="$HOME/.local/bin:$PATH"
 pit --version
 pit doctor system
@@ -21,8 +21,8 @@ Install a locally built alpha bundle without root:
 ```bash
 ./release/build-alpha-bundle.sh --output ./release/dist
 ./scripts/install-alpha.sh \
-  --archive ./release/dist/pitfast-0.14.0-alpha.1-x86_64-unknown-linux-gnu.tar.gz \
-  --version 0.14.0-alpha.1 \
+  --archive ./release/dist/pitfast-0.14.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz \
+  --version 0.14.0-alpha.2 \
   --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 pit --version
