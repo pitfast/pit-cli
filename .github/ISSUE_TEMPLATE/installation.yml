@@ -1,0 +1,22 @@
+name: Installation issue
+description: Report a PitFast installation or local runtime problem
+title: "install: "
+labels: [installation]
+body:
+  - type: markdown
+    attributes:
+      value: "Review diagnostics before attaching them and remove all secrets."
+  - type: textarea
+    id: steps
+    attributes:
+      label: Installation steps
+      description: Include the installer command, platform, and exact error.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: System diagnostics
+      description: Output from `pit doctor system` and reviewed `pit diagnostics`.
+    validations:
+      required: true

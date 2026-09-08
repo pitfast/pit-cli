@@ -94,6 +94,8 @@ enum Command {
         #[command(subcommand)]
         command: GarageCommand,
     },
+    /// Write a redacted, shareable support diagnostic JSON document.
+    Diagnostics(commands::diagnostics::DiagnosticsArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -197,5 +199,6 @@ async fn main() -> Result<()> {
             GarageCommand::List(args) => commands::circuit::list(args).await,
             GarageCommand::Inspect(args) => commands::circuit::inspect(args).await,
         },
+        Command::Diagnostics(args) => commands::diagnostics::run(args),
     }
 }

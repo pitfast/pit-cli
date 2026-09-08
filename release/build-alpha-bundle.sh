@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="0.13.0-alpha.1"
+version="0.14.0-alpha.1"
 output_dir=""
 skip_build=0
 while [[ $# -gt 0 ]]; do
@@ -23,9 +23,41 @@ root_dir="$(cd -- "$cli_dir/.." && pwd)"
 output_dir="${output_dir:-$cli_dir/release/dist}"
 target="$(rustc -vV | sed -n 's/^host: //p')"
 [[ "$target" == "x86_64-unknown-linux-gnu" ]] || {
-  echo "v0.13 alpha bundle currently requires x86_64-unknown-linux-gnu; found $target" >&2
+  echo "v0.14 alpha bundle currently requires x86_64-unknown-linux-gnu; found $target" >&2
   exit 1
 }
+coordination_file="$cli_dir/release/pitfast-release.toml"
+[[ -f "$coordination_file" ]] || {
+  echo "missing release coordination file: $coordination_file" >&2
+  exit 1
+}
+python3 - "$coordination_file" "$version" "$target" "$root_dir" <<'PY'
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+coordination = Path(sys.argv[1])
+requested_version = sys.argv[2]
+requested_target = sys.argv[3]
+root = Path(sys.argv[4])
+with coordination.open("rb") as stream:
+    data = tomllib.load(stream)
+if data.get("version") != requested_version:
+    raise SystemExit(
+        f"bundle version {requested_version} does not match coordination version {data.get('version')}"
+    )
+if data.get("target") != requested_target:
+    raise SystemExit(
+        f"bundle target {requested_target} does not match coordination target {data.get('target')}"
+    )
+for name, expected in data.get("repositories", {}).items():
+    actual = subprocess.check_output(
+        ["git", "-C", str(root / name), "rev-parse", "HEAD"], text=True
+    ).strip()
+    if actual != expected:
+        raise SystemExit(f"{name} is at {actual}, expected coordinated revision {expected}")
+PY
 
 if [[ "$skip_build" -eq 0 ]]; then
   cargo build --manifest-path "$cli_dir/Cargo.toml" --release

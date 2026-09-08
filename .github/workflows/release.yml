@@ -1,0 +1,112 @@
+name: PitFast alpha release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_ref:
+        description: "pit-cli branch, tag, or commit to package"
+        required: true
+        default: master
+
+permissions:
+  contents: write
+
+jobs:
+  bundle-linux-x86_64:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out coordinating CLI
+        uses: actions/checkout@v4
+        with:
+          path: pit-cli
+          ref: ${{ inputs.release_ref || github.ref }}
+
+      - name: Read coordinated sibling revisions
+        id: revisions
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import tomllib
+          from pathlib import Path
+          with Path("pit-cli/release/pitfast-release.toml").open("rb") as stream:
+              data = tomllib.load(stream)
+          for name, revision in data["repositories"].items():
+              print(f"{name.replace('-', '_')}={revision}")
+          print(f"version={data['version']}")
+          PY
+
+      - name: Check out pit-box
+        uses: actions/checkout@v4
+        with:
+          repository: pitfast/pit-box
+          ref: ${{ steps.revisions.outputs.pit_box }}
+          path: pit-box
+
+      - name: Check out pit-crew
+        uses: actions/checkout@v4
+        with:
+          repository: pitfast/pit-crew
+          ref: ${{ steps.revisions.outputs.pit_crew }}
+          path: pit-crew
+
+      - name: Check out pit-lane
+        uses: actions/checkout@v4
+        with:
+          repository: pitfast/pit-lane
+          ref: ${{ steps.revisions.outputs.pit_lane }}
+          path: pit-lane
+
+      - name: Check out pit-paddock
+        uses: actions/checkout@v4
+        with:
+          repository: pitfast/pit-paddock
+          ref: ${{ steps.revisions.outputs.pit_paddock }}
+          path: pit-paddock
+
+      - name: Check out pit-circuit
+        uses: actions/checkout@v4
+        with:
+          repository: pitfast/pit-circuit
+          ref: ${{ steps.revisions.outputs.pit_circuit }}
+          path: pit-circuit
+
+      - name: Build and package
+        shell: bash
+        run: |
+          bash pit-cli/release/build-alpha-bundle.sh --output pit-cli/release/dist
+          cp pit-cli/scripts/install-alpha.sh pit-cli/release/dist/install-alpha.sh
+
+      - name: Packaged smoke test
+        shell: bash
+        run: |
+          archive=$(find pit-cli/release/dist -maxdepth 1 -name '*.tar.gz' -print -quit)
+          test -n "$archive"
+          smoke=$(mktemp -d)
+          tar -xzf "$archive" -C "$smoke"
+          "$smoke/bin/pit" --version
+          "$smoke/bin/pit" doctor --json system >/dev/null
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pitfast-${{ steps.revisions.outputs.version }}-linux-x86_64
+          path: pit-cli/release/dist/*
+
+      - name: Publish GitHub prerelease
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          archive=$(find pit-cli/release/dist -maxdepth 1 -name '*.tar.gz' -print -quit)
+          checksum="$archive.sha256"
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "PitFast $GITHUB_REF_NAME" \
+            --notes "Public self-serve alpha for Linux x86_64. See the README for supported scope and limitations." \
+            --prerelease \
+            "$archive" "$checksum" \
+            pit-cli/release/dist/install-alpha.sh

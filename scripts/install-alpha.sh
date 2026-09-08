@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version=""
+version="${PITFAST_VERSION:-0.14.0-alpha.1}"
 prefix="${HOME:?HOME must be set}/.local"
 archive=""
 checksum=""
@@ -26,6 +26,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+command -v python3 >/dev/null 2>&1 || {
+  echo "python3 is required to validate the PitFast release manifest" >&2
+  exit 1
+}
+
 base="$prefix/share/pitfast"
 if [[ "$uninstall" -eq 1 ]]; then
   rm -f -- "$prefix/bin/pit"
@@ -36,6 +41,11 @@ if [[ "$uninstall" -eq 1 ]]; then
 fi
 
 download_dir=""
+release_base="${PITFAST_RELEASE_BASE_URL:-https://github.com/pitfast/pit-cli/releases/download}"
+if [[ -z "$archive" && -z "$url" ]]; then
+  [[ -n "$version" ]] || { echo "--version is required when no archive or URL is supplied" >&2; exit 2; }
+  url="$release_base/v${version}/pitfast-${version}-x86_64-unknown-linux-gnu.tar.gz"
+fi
 if [[ -n "$url" ]]; then
   command -v curl >/dev/null || { echo "curl is required for URL installation" >&2; exit 1; }
   download_dir="$(mktemp -d "${TMPDIR:-/tmp}/pitfast-download.XXXXXX")"
@@ -53,6 +63,10 @@ if [[ -z "$checksum" && -f "$archive.sha256" ]]; then checksum="$archive.sha256"
 archive="$(cd -- "$(dirname -- "$archive")" && pwd)/$(basename -- "$archive")"
 checksum="$(cd -- "$(dirname -- "$checksum")" && pwd)/$(basename -- "$checksum")"
 expected="$(awk 'NF {print $1; exit}' "$checksum")"
+[[ "$expected" =~ ^[[:xdigit:]]{64}$ ]] || {
+  echo "checksum file does not contain a valid SHA-256 digest" >&2
+  exit 1
+}
 actual="$(sha256sum "$archive" | awk '{print $1}')"
 [[ "$expected" == "$actual" ]] || {
   echo "checksum verification failed for $archive" >&2
@@ -95,7 +109,16 @@ done
 version_dir="$base/versions/$installed_version"
 mkdir -p -- "$base/versions" "$prefix/bin"
 temporary="$base/versions/.${installed_version}.tmp.$$"
-rm -rf -- "$temporary"
+if [[ -e "$temporary" ]]; then
+  echo "temporary install path already exists: $temporary" >&2
+  exit 1
+fi
+cleanup_temporary() {
+  if [[ -n "${temporary:-}" && -d "$temporary" ]]; then
+    rm -rf -- "$temporary"
+  fi
+}
+trap 'cleanup_temporary; rm -rf -- "$extract" "$download_dir"' EXIT
 mkdir -- "$temporary"
 cp -a -- "$extract/bin" "$extract/share" "$temporary/"
 chmod -R a+rX,u+w -- "$temporary"
@@ -104,13 +127,25 @@ if [[ -e "$version_dir" ]]; then
     echo "managed version directory is incomplete; refusing to overwrite $version_dir" >&2
     exit 1
   }
-  rm -rf -- "$temporary"
+  cmp -s "$temporary/share/release-manifest.json" "$version_dir/share/release-manifest.json" || {
+    echo "version $installed_version is already installed with different release metadata; refusing to overwrite it" >&2
+    exit 1
+  }
+  cleanup_temporary
 else
   mv -- "$temporary" "$version_dir"
 fi
 current_tmp="$base/.current.$$"
+if [[ -e "$base/current" && ! -L "$base/current" ]]; then
+  echo "refusing to replace unmanaged path $base/current" >&2
+  exit 1
+fi
 ln -sfn -- "$version_dir" "$current_tmp"
 mv -Tf -- "$current_tmp" "$base/current"
+if [[ -e "$prefix/bin/pit" && ! -L "$prefix/bin/pit" ]]; then
+  echo "refusing to replace unmanaged executable $prefix/bin/pit" >&2
+  exit 1
+fi
 ln -sfn -- "$base/current/bin/pit" "$prefix/bin/pit"
 "$prefix/bin/pit" --version
 case ":${PATH}:" in

@@ -5,6 +5,7 @@ pub mod circuit;
 pub mod clean;
 pub mod config;
 pub mod deploy;
+pub mod diagnostics;
 pub mod doctor;
 pub mod init;
 pub mod inspect;

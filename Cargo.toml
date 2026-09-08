@@ -1,6 +1,6 @@
 [package]
 name = "pit"
-version = "0.13.0-alpha.1"
+version = "0.14.0-alpha.1"
 edition = "2024"
 license = "MIT"
 description = "PitFast developer CLI"

@@ -1,11 +1,19 @@
-# PitFast developer alpha quickstart
+# PitFast public alpha quickstart
 
-Install a locally built v0.13 alpha bundle without root:
+PitFast is public alpha software for Linux x86_64 on glibc-compatible systems.
+It keeps application workloads disposable and infrastructure shared; it does
+not start one process, port, or replica per manifest service.
+
+When a hosted GitHub prerelease is available, install its exact version with
+the command shown on the release page. For a local source build, use:
+
+Install a locally built alpha bundle without root:
 
 ```bash
 ./release/build-alpha-bundle.sh --output ./release/dist
 ./scripts/install-alpha.sh \
-  --archive ./release/dist/pitfast-0.13.0-alpha.1-x86_64-unknown-linux-gnu.tar.gz \
+  --archive ./release/dist/pitfast-0.14.0-alpha.1-x86_64-unknown-linux-gnu.tar.gz \
+  --version 0.14.0-alpha.1 \
   --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 pit --version

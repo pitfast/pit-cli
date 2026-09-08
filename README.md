@@ -1,4 +1,25 @@
-# pit
+# PitFast
+
+PitFast is a WASM-native, execution-first application platform. Applications
+do not own replicas, service ports, or persistent service processes; PitFast
+keeps infrastructure ready and executes workloads only when work exists.
+
+**Public alpha:** expect breaking changes, incomplete compatibility, and no
+production SLA or HA guarantee.
+
+## Install
+
+The public alpha distribution targets Linux x86_64 in a glibc-compatible
+environment. The version-pinned installer is published with each GitHub
+Release. Until a release is published, use the local bundle instructions in
+[`docs/quickstart-alpha.md`](docs/quickstart-alpha.md).
+
+After installation, verify the software and host:
+
+```bash
+pit --version
+pit doctor system
+```
 
 pit is the PitFast developer CLI. It is a thin composition layer:
 
@@ -78,6 +99,7 @@ pit up --file prod.pit
 pit build --file app.pit api
 pit deploy --file prod.pit
 pit config show --file app.pit
+pit diagnostics --output pit-diagnostics.json
 ```
 
 Resources in a manifest are external capability bindings, not PitFast
@@ -237,6 +259,16 @@ dependency paths and `--json` for CI:
 pit doctor --verbose
 pit doctor --json
 ```
+
+For a safe support attachment, run:
+
+```bash
+pit diagnostics --output pit-diagnostics.json
+```
+
+The JSON contains host, version, toolchain, manifest structure, and interface
+metadata, but not environment values, credentials, authorization headers, or
+raw logs. Review it before sharing.
 
 The doctor does not equate framework recognition with compatibility. For
 example, FastAPI is detected as an ASGI hint, then its `fastapi → pydantic →
