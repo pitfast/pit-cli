@@ -8,8 +8,8 @@ target = "x86_64-unknown-linux-gnu"
 [repositories]
 pit-box = "900c730"
 pit-crew = "eb199d6"
-pit-cli = "HEAD"
-pit-lane = "WORKTREE"
+pit-cli = "e7c9d6dd7a7efe425c79772f432d865cad70021a"
+pit-lane = "2a6a3c972671b39d93357bda3bafe6efe2dea83f"
 pit-paddock = "554fce2"
 pit-circuit = "8a1983d"
 
