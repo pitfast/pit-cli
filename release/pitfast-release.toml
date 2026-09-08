@@ -1,0 +1,18 @@
+# Coordinated source revisions for the PitFast v0.13 alpha bundle.
+# The repositories remain independent; this file records the exact inputs
+# that produced one compatible distribution bundle.
+schema = 1
+version = "0.13.0-alpha.1"
+target = "x86_64-unknown-linux-gnu"
+
+[repositories]
+pit-box = "900c730"
+pit-crew = "eb199d6"
+pit-cli = "HEAD"
+pit-lane = "WORKTREE"
+pit-paddock = "554fce2"
+pit-circuit = "8a1983d"
+
+[bundle]
+local_runtime = ["pit", "pit-lane"]
+distributed_runtime = ["pit", "pit-lane", "pit-node", "pit-garage", "pit-circuit"]

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::Args;
 use pit_artifact::{BuildProfile, ComponentWorld};
 
@@ -118,6 +118,7 @@ pub async fn run(args: UpArgs) -> Result<()> {
     }
 
     println!("\nDeployment");
+    ensure_bundled_pit_lane(&args.control_endpoint, args.artifact_store.as_deref()).await?;
     let prepare_started = Instant::now();
     let mut services = BTreeMap::new();
     for service in &plan.services {
@@ -222,4 +223,101 @@ pub async fn run(args: UpArgs) -> Result<()> {
         );
     }
     Ok(())
+}
+
+const DEFAULT_CONTROL_ENDPOINT: &str = "http://127.0.0.1:7081";
+
+/// A distribution bundle contains the CLI and its local PitLane sibling. When
+/// that topology is present, make `pit up` a one-command local experience.
+/// Source-checkout users retain the explicit endpoint workflow used by the
+/// existing tests and distributed deployments.
+async fn ensure_bundled_pit_lane(
+    control_endpoint: &str,
+    artifact_store: Option<&std::path::Path>,
+) -> Result<()> {
+    if control_endpoint != DEFAULT_CONTROL_ENDPOINT
+        || reqwest::get(format!("{control_endpoint}/v1/runtime"))
+            .await
+            .is_ok()
+    {
+        return Ok(());
+    }
+    let executable = std::env::current_exe()?;
+    let Some(bin_dir) = executable.parent() else {
+        return Ok(());
+    };
+    let pit_lane = bin_dir.join("pit-lane");
+    if !pit_lane.is_file() {
+        return Ok(());
+    }
+
+    let state_dir = std::env::var_os("XDG_STATE_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(std::path::PathBuf::from)
+                .map(|home| home.join(".local/state"))
+        })
+        .ok_or_else(|| anyhow!("cannot locate a user state directory for local PitLane"))?
+        .join("pitfast");
+    std::fs::create_dir_all(&state_dir)?;
+    let pid_path = state_dir.join("pit-lane.pid");
+    if let Some(pid) = std::fs::read_to_string(&pid_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+    {
+        if std::path::Path::new(&format!("/proc/{pid}")).exists() {
+            bail!(
+                "local PitLane is unavailable at {control_endpoint}, but process {pid} is still recorded; inspect {}",
+                state_dir.display()
+            );
+        }
+        let _ = std::fs::remove_file(&pid_path);
+    }
+    let log_path = state_dir.join("pit-lane.log");
+    let log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .with_context(|| format!("failed to open local PitLane log {}", log_path.display()))?;
+    // Detach the infrastructure daemon from the short-lived `pit up` process
+    // group. This keeps the local runtime alive after the command returns.
+    let mut command = std::process::Command::new("setsid");
+    command
+        .arg(&pit_lane)
+        .args([
+            "--listen",
+            "127.0.0.1:7080",
+            "--control-listen",
+            "127.0.0.1:7081",
+        ])
+        .stdout(std::process::Stdio::from(log.try_clone()?))
+        .stderr(std::process::Stdio::from(log));
+    if let Some(artifact_store) = artifact_store {
+        command.args(["--artifact-store", &artifact_store.to_string_lossy()]);
+    }
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("failed to start bundled PitLane {}", pit_lane.display()))?;
+    std::fs::write(&pid_path, child.id().to_string())?;
+    for _ in 0..100 {
+        if reqwest::get(format!("{control_endpoint}/v1/runtime"))
+            .await
+            .is_ok()
+        {
+            println!("\nLocal PitLane started");
+            return Ok(());
+        }
+        if child.try_wait()?.is_some() {
+            bail!(
+                "bundled PitLane exited before becoming ready; inspect {}",
+                log_path.display()
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    bail!(
+        "bundled PitLane did not become ready at {control_endpoint}; inspect {}",
+        log_path.display()
+    )
 }

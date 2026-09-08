@@ -12,6 +12,7 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Usage: $0 [--prefix DIRECTORY]"
       echo "Build and install the local PitFast CLI without requiring root."
+      echo "For a versioned CLI + local runtime bundle, use scripts/install-alpha.sh."
       exit 0
       ;;
     *)
