@@ -8,7 +8,7 @@ target = "x86_64-unknown-linux-gnu"
 [repositories]
 pit-box = "900c730"
 pit-crew = "eb199d6"
-pit-cli = "e7c9d6dd7a7efe425c79772f432d865cad70021a"
+pit-cli = "5db18f8e0952338f9c8594889fd11d5e59c33b0f"
 pit-lane = "4403c6a020b1bec575a27952f65369940fd5ba41"
 pit-paddock = "554fce2"
 pit-circuit = "8a1983d"
