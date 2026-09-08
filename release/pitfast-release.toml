@@ -2,16 +2,16 @@
 # The repositories remain independent; this file records the exact inputs
 # that produced one compatible distribution bundle.
 schema = 1
-version = "0.14.0-alpha.2"
+version = "0.14.0-alpha.3"
 target = "x86_64-unknown-linux-gnu"
 
 [repositories]
 # pit-cli is the coordinating checkout and is recorded from its exact HEAD by
 # the bundle builder; pinning it in its own source would be self-referential.
-pit-box = "30d7a5fd689b8009af918d322f086f43d4a166f4"
+pit-box = "41f6b5c3006781ad93708153184f5ff6fa38b0fb"
 pit-crew = "e1ea95264cd820cc551648e73f59e8edb8b2145a"
 pit-lane = "11b9d5eb2e9614859e372beac92c32814bf4872e"
-pit-paddock = "6f05ad13d1b0b18a7ceb938d7d4e3b7692cd872c"
+pit-paddock = "e74ea8079b08a653ebc73c101f60deddeb956186"
 pit-circuit = "2d08d5bf632de58a3714fdc12a531ecbf6bf4786"
 
 [bundle]

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="${PITFAST_VERSION:-0.14.0-alpha.2}"
+version="${PITFAST_VERSION:-0.14.0-alpha.3}"
 prefix="${HOME:?HOME must be set}/.local"
 archive=""
 checksum=""

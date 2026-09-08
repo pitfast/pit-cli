@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="0.14.0-alpha.2"
+version="0.14.0-alpha.3"
 output_dir=""
 skip_build=0
 while [[ $# -gt 0 ]]; do

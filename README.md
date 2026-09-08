@@ -13,8 +13,8 @@ The public alpha distribution targets Linux x86_64 in a glibc-compatible
 environment. Install the published, checksum-verified prerelease:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pitfast/pit-cli/v0.14.0-alpha.2/scripts/install-alpha.sh \
-  | bash -s -- --version 0.14.0-alpha.2
+curl -fsSL https://raw.githubusercontent.com/pitfast/pit-cli/v0.14.0-alpha.3/scripts/install-alpha.sh \
+  | bash -s -- --version 0.14.0-alpha.3
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
