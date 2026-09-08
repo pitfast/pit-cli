@@ -1,6 +1,6 @@
 name: PitFast alpha release
 
-on:
+"on":
   push:
     tags:
       - "v*"
