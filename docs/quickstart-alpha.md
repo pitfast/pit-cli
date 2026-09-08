@@ -4,8 +4,17 @@ PitFast is public alpha software for Linux x86_64 on glibc-compatible systems.
 It keeps application workloads disposable and infrastructure shared; it does
 not start one process, port, or replica per manifest service.
 
-When a hosted GitHub prerelease is available, install its exact version with
-the command shown on the release page. For a local source build, use:
+Install the published prerelease without cloning PitFast:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pitfast/pit-cli/v0.14.0-alpha.1/scripts/install-alpha.sh \
+  | bash -s -- --version 0.14.0-alpha.1
+export PATH="$HOME/.local/bin:$PATH"
+pit --version
+pit doctor system
+```
+
+For a local source build, use:
 
 Install a locally built alpha bundle without root:
 

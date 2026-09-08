@@ -10,8 +10,15 @@ production SLA or HA guarantee.
 ## Install
 
 The public alpha distribution targets Linux x86_64 in a glibc-compatible
-environment. The version-pinned installer is published with each GitHub
-Release. Until a release is published, use the local bundle instructions in
+environment. Install the published, checksum-verified prerelease:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pitfast/pit-cli/v0.14.0-alpha.1/scripts/install-alpha.sh \
+  | bash -s -- --version 0.14.0-alpha.1
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+For a local source build, use the bundle instructions in
 [`docs/quickstart-alpha.md`](docs/quickstart-alpha.md).
 
 After installation, verify the software and host:
