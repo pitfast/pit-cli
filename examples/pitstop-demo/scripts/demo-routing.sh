@@ -20,8 +20,11 @@ blue="$(get_release)"
 test -n "$blue"
 echo "blue/stable: $blue"
 
-cp -a "$root" "$tmp/green"
-rm -rf "$tmp/green"/.pit "$tmp/green"/orders/.pit "$tmp/green"/users/.pit "$tmp/green"/web/.pit
+mkdir -p "$tmp/green/orders" "$tmp/green/users" "$tmp/green/web"
+cp "$root/app.pit" "$tmp/green/"
+cp -a "$root/orders/app" "$root/orders/go.mod" "$root/orders/componentize-go.toml" "$root/orders/wit" "$tmp/green/orders/"
+cp -a "$root/users/main.py" "$root/users/pyproject.toml" "$tmp/green/users/"
+cp -a "$root/web/dist" "$root/web/package.json" "$tmp/green/web/"
 sed -i 's/"release":"blue"/"release":"green"/g' "$tmp/green/orders/app/app.go" "$tmp/green/users/main.py"
 "$pit" up -f "$tmp/green/app.pit" >/dev/null
 green="$(get_release)"
