@@ -28,7 +28,10 @@ pit --version
 pit doctor system
 ```
 
-For a short operational walkthrough, use the read-only F1-style Cockpit:
+The read-only F1-style Cockpit is included in the current source/demo build.
+The published `0.14.0-alpha.3` bundle predates this demo command; build the
+current CLI and PitLane locally as described in
+[`docs/cockpit-demo.md`](docs/cockpit-demo.md):
 
 ```bash
 pit cockpit
