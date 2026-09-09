@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>PitFast Pit Stop Demo</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">PITFAST / COCKPIT DEMO</p>
+      <h1>Deployed does not mean running.</h1>
+      <p class="lede">One application, four logical services, shared execution capacity.</p>
+      <section class="cards">
+        <a href="/orders/health"><strong>orders</strong><span>Go · net/http</span></a>
+        <a href="/catalog/items"><strong>catalog</strong><span>JavaScript · Fetch</span></a>
+        <a href="/users/health"><strong>users</strong><span>Python · ASGI</span></a>
+      </section>
+      <p>Try the workload buttons, then watch <code>pit cockpit</code> while running the burst script.</p>
+      <section class="actions">
+        <button data-url="/orders/cpu?work=medium">Run orders work</button>
+        <button data-url="/catalog/cpu?work=medium">Run catalog work</button>
+        <button data-url="/users/cpu?work=medium">Run users work</button>
+      </section>
+      <pre id="result">Ready. PitFast infrastructure is waiting for work.</pre>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

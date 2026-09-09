@@ -53,6 +53,8 @@ enum Command {
     System,
     /// Call a logical PitFast HTTP service through the local PitLane.
     Call(commands::call::CallArgs),
+    /// Open the read-only local F1-style operational Cockpit.
+    Cockpit(commands::cockpit::CockpitArgs),
     /// Inspect configured PostgreSQL resources.
     Resource {
         #[command(subcommand)]
@@ -168,6 +170,7 @@ async fn main() -> Result<()> {
         Command::Clean => commands::clean::run(),
         Command::System => commands::system::run(),
         Command::Call(args) => commands::call::run(args).await,
+        Command::Cockpit(args) => commands::cockpit::run(args).await,
         Command::Resource { command } => match command {
             ResourceCommand::List => commands::resource::list(),
             ResourceCommand::Inspect(args) => commands::resource::inspect(args),

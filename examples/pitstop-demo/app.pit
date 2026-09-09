@@ -1,0 +1,24 @@
+schema = 1
+name = "pitstop-demo"
+
+[services.web]
+build = "web"
+language = "javascript"
+interface = "static-web"
+
+[services.orders]
+build = "orders"
+language = "go"
+interface = "net-http"
+entry = "app:Handler"
+
+[services.users]
+build = "users"
+language = "python"
+interface = "asgi"
+entry = "main:app"
+
+[routes]
+"/" = "web"
+"/orders" = "orders"
+"/users" = "users"

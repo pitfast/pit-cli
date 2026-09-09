@@ -1,0 +1,4 @@
+[project]
+name = "pitstop-demo-users"
+version = "0.1.0"
+dependencies = []

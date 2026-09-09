@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
+crossterm = "0.29"
 pit-artifact = { path = "../pit-crew/crates/pit-artifact" }
 pit-builder-rust = { path = "../pit-crew/crates/pit-builder-rust" }
 pit-builder-go = { path = "../pit-crew/crates/pit-builder-go" }

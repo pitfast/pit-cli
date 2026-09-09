@@ -28,6 +28,18 @@ pit --version
 pit doctor system
 ```
 
+For a short operational walkthrough, use the read-only F1-style Cockpit:
+
+```bash
+pit cockpit
+```
+
+The local demo application, burst profiles, benchmark workflow, and
+BukuWarung-ready talk track are documented in
+[`docs/cockpit-demo.md`](docs/cockpit-demo.md). The Cockpit reads only the
+loopback PitLane snapshot at `/v1/cockpit/snapshot`; it has no deployment or
+rollback controls.
+
 pit is the PitFast developer CLI. It is a thin composition layer:
 
 `pit call pit://service/path` sends a logical HTTP request to the local PitLane

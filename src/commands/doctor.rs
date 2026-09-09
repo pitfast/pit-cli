@@ -438,6 +438,7 @@ fn missing_toolchain_report(language: Option<Language>) -> Option<CompatibilityR
         .filter(|(command, _)| {
             let command =
                 match *command {
+                    "go" => std::env::var("PITFAST_GO").unwrap_or_else(|_| (*command).into()),
                     "componentize-go" => std::env::var("PITFAST_COMPONENTIZE_GO")
                         .unwrap_or_else(|_| (*command).into()),
                     "componentize-py" => std::env::var("PITFAST_COMPONENTIZE_PY")
@@ -482,9 +483,20 @@ fn missing_toolchain_report(language: Option<Language>) -> Option<CompatibilityR
 
 fn command_available(command: &str) -> bool {
     std::process::Command::new(command)
-        .arg("--version")
+        .args(version_probe_args(command))
         .output()
         .is_ok_and(|output| output.status.success())
+}
+
+fn version_probe_args(command: &str) -> &'static [&'static str] {
+    if std::path::Path::new(command)
+        .file_name()
+        .is_some_and(|name| name == "go")
+    {
+        &["version"]
+    } else {
+        &["--version"]
+    }
 }
 
 fn frontend_report(project_dir: &Path, interface: Option<&ApplicationInterface>) -> Option<Value> {
@@ -659,5 +671,21 @@ async fn probe_builder(builder: impl LanguageBuilder) -> (String, String) {
             builder.language().as_str().into(),
             format!("blocked: {error}"),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::version_probe_args;
+
+    #[test]
+    fn go_uses_its_real_version_subcommand() {
+        assert_eq!(version_probe_args("go"), &["version"]);
+        assert_eq!(version_probe_args("/usr/bin/go"), &["version"]);
+    }
+
+    #[test]
+    fn other_tools_keep_their_version_flag() {
+        assert_eq!(version_probe_args("node"), &["--version"]);
     }
 }

@@ -3,6 +3,7 @@ pub mod build;
 pub mod call;
 pub mod circuit;
 pub mod clean;
+pub mod cockpit;
 pub mod config;
 pub mod deploy;
 pub mod diagnostics;
