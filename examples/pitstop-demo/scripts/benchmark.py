@@ -23,6 +23,29 @@ def percentile(values, p):
     return ordered[index]
 
 
+def maximum(values):
+    values = [value for value in values if value is not None]
+    return max(values) if values else None
+
+
+def display(value, suffix=""):
+    if value is None:
+        return "N/A"
+    if isinstance(value, float):
+        return f"{value:.2f}{suffix}"
+    return f"{value}{suffix}"
+
+
+def memory_bytes():
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemTotal:"):
+                return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
 def request(base, index, work=None):
     service = ("orders", "users")[index % 2]
     suffix = "/health" if work is None else f"/cpu?work={work}"
@@ -80,13 +103,16 @@ def run_scenario(base, control, name, count, concurrency, work=None):
         "failures": len(results) - len(successful),
         "http_ms": {key: percentile([item["ms"] for item in successful], key) for key in (50, 95, 99)},
         "queue_wait_us": {key: percentile([item["queue_wait_us"] for item in telemetry], key) for key in (50, 95, 99)},
-        "scheduler_gap_us": {key: percentile([item["scheduler_gap_us"] for item in telemetry], key) for key in (50, 95, 99)},
+        "dispatch_gap_us": {key: percentile([item["dispatch_gap_us"] for item in telemetry], key) for key in (50, 95, 99)},
         "guest_execution_us": {key: percentile([item["guest_execution_us"] for item in telemetry], key) for key in (50, 95, 99)},
         "total_execution_us": {key: percentile([item["total_us"] for item in telemetry], key) for key in (50, 95, 99)},
-        "active_lane_peak": max((snapshot["grid"]["running"] for snapshot in samples), default=0),
-        "active_stores_peak": max((snapshot["system"]["active_stores"] for snapshot in samples), default=0),
-        "cpu_peak_percent": max((snapshot["system"]["process_cpu_percent"] or 0 for snapshot in samples), default=0),
-        "rss_peak_bytes": max((snapshot["system"]["process_rss_bytes"] or 0 for snapshot in samples), default=0),
+        # Peak activity is maintained by the scheduler at assignment time;
+        # polling `running` can miss short executions entirely.
+        "active_lane_peak": maximum(snapshot["grid"].get("peak_active_lanes") for snapshot in samples),
+        "active_stores_peak": maximum(snapshot["system"].get("active_stores") for snapshot in samples),
+        "cpu_peak_percent": maximum(snapshot["system"].get("process_cpu_percent") for snapshot in samples),
+        "cpu_equivalent_cores_peak": maximum(snapshot["system"].get("cpu_equivalent_cores") for snapshot in samples),
+        "rss_peak_bytes": maximum(snapshot["system"].get("process_rss_bytes") for snapshot in samples),
         "per_service": {service: sum(1 for item in successful if item["service"] == service) for service in ("orders", "users")},
     }
 
@@ -104,8 +130,15 @@ def main():
         run_scenario(base, control, "cpu-mix", 48, 16, "medium"),
     ]
     report = {
-        "schema": 1,
-        "host": {"os": platform.platform(), "machine": platform.machine(), "cpu_count": os.cpu_count()},
+        "schema": 2,
+        "metric_definitions": {
+            "queue_wait": "time from request admission to lane assignment while capacity is unavailable",
+            "dispatch_gap": "time from lane assignment to guest invocation start",
+            "guest_execution": "guest execution duration",
+            "internal_total": "PitFast internal execution lifecycle duration",
+            "external_http": "client-observed HTTP request duration",
+        },
+        "host": {"os": platform.platform(), "machine": platform.machine(), "logical_cpus": os.cpu_count(), "memory_bytes": memory_bytes()},
         "pit_lane_endpoint": control,
         "http_endpoint": base,
         "idle": {"queue_depth": idle["grid"]["queue_depth"], "running": idle["grid"]["running"], "services": len(idle["services"])},
@@ -113,10 +146,11 @@ def main():
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
-    lines = ["# PitFast Cockpit Demo Benchmark", "", f"Host: {report['host']['os']} / {report['host']['machine']} / {report['host']['cpu_count']} CPUs", "", "| Scenario | Req/s | HTTP p50/p95/p99 ms | Queue p95 us | Guest p95 us | Lane peak | CPU peak | RSS peak | Errors |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    lines = ["# PitFast Cockpit Demo Benchmark", "", f"Host: {report['host']['os']} / {report['host']['machine']} / {report['host']['logical_cpus']} logical CPUs", "", "| Scenario | Req/s | External HTTP p50/p95/p99 ms | Queue wait p95 us | Dispatch gap p95 us | Guest p95 us | Internal total p95 us | Lane peak | Process CPU | RSS peak | Errors |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for item in scenarios:
-        lines.append(f"| {item['name']} | {item['throughput_rps']:.2f} | {item['http_ms'][50]:.2f}/{item['http_ms'][95]:.2f}/{item['http_ms'][99]:.2f} | {item['queue_wait_us'][95]} | {item['guest_execution_us'][95]} | {item['active_lane_peak']} | {item['cpu_peak_percent']:.1f}% | {item['rss_peak_bytes'] / 1024 / 1024:.1f} MiB | {item['failures']} |")
-    lines += ["", "Timing fields are collected from the read-only PitLane Cockpit snapshot. CPU/RSS are process samples from /proc.", "The benchmark does not claim OS page-cache coldness or zero infrastructure memory."]
+        http = item["http_ms"]
+        lines.append(f"| {item['name']} | {item['throughput_rps']:.2f} | {display(http[50], ' ms')}/{display(http[95], ' ms')}/{display(http[99], ' ms')} | {display(item['queue_wait_us'][95])} | {display(item['dispatch_gap_us'][95])} | {display(item['guest_execution_us'][95])} | {display(item['total_execution_us'][95])} | {display(item['active_lane_peak'])} | {display(item['cpu_peak_percent'], '%')} (~{display(item['cpu_equivalent_cores_peak'])} cores) | {display(None if item['rss_peak_bytes'] is None else round(item['rss_peak_bytes'] / 1024 / 1024, 1), ' MiB')} | {item['failures']} |")
+    lines += ["", "Queue wait is capacity waiting; dispatch gap is lane assignment to guest start. External HTTP latency includes the client/network boundary; internal timings come from PitLane telemetry.", "Timing fields are collected from the read-only PitLane Cockpit snapshot. CPU/RSS are process samples from /proc.", "The benchmark does not claim OS page-cache coldness or zero infrastructure memory."]
     (output / "summary.md").write_text("\n".join(lines) + "\n")
     print(output / "summary.md")
 

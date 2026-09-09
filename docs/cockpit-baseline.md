@@ -23,5 +23,19 @@ The schema is versioned (`schema: 1`) and contains `grid`, `services`,
 64 entries. CPU and RSS are best-effort host process measurements; missing
 `/proc` data is represented as `null`, never fabricated.
 
+`grid.peak_active_lanes` is event-derived by PitBox when a lane is assigned;
+it is not reconstructed from Cockpit polling. `queue_wait_us` ends at lane
+assignment. `dispatch_gap_us` starts at lane assignment and ends when the
+guest invocation begins. `guest_execution_us` and `total_us` are internal
+PitFast timings; they must not be compared directly with external HTTP
+latency, which includes the client and transport boundary.
+
 The demo intentionally does not call this an OS page-cache-cold benchmark.
 The benchmark measures real request and runtime behavior on the current host.
+
+The demo benchmark is schema version 2. Its report keeps these clocks
+separate: external HTTP latency, queue wait, dispatch gap, guest execution,
+and internal total execution. CPU is intentionally allowed above 100% and is
+also shown as equivalent logical CPUs; an unobserved sample is `null`/`N/A`,
+not measured zero. `peak_active_lanes` comes from assignment events rather
+than the sampler.

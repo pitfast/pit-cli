@@ -67,7 +67,9 @@ The top half reads `QUEUE → PIT ENTRY → LANES → EXIT`: queued requests are
 yellow tokens, occupied lanes are red, free lanes are dim, and recent
 completed/failed executions appear on the exit rail. The lower panels show
 real service readiness, queue/running/completed counts, timing detail, CPU,
-RSS, active guest executions, and prepared artifact state.
+RSS, active guest executions, and prepared artifact state. `peak-lanes` is an
+event-derived scheduler counter, so a short execution is counted even if it
+finishes between two TUI polls.
 
 ## Live walkthrough
 
@@ -99,9 +101,10 @@ Run from the demo directory after `pit up`:
 ./scripts/bench-demo.sh
 ```
 
-The script records real HTTP percentiles and joins them with sampled Cockpit
-snapshots for queue wait, scheduler gap, guest execution, total execution,
-active-lane peak, CPU, and RSS. It writes:
+The script records real external HTTP percentiles and joins them with
+completed Cockpit telemetry for queue wait, dispatch gap, guest execution,
+internal total execution, event-derived active-lane peak, CPU, and RSS. It
+writes:
 
 ```text
 artifacts/bench/summary.json

@@ -44,7 +44,7 @@ struct Grid {
     queue_depth: usize,
     completed: u64,
     failed: u64,
-    peak_active: usize,
+    peak_active_lanes: usize,
     utilization: f64,
     lanes: Vec<Lane>,
 }
@@ -76,7 +76,7 @@ struct Execution {
     lane_id: usize,
     status: String,
     queue_wait_us: u128,
-    scheduler_gap_us: u128,
+    dispatch_gap_us: u128,
     guest_execution_us: u128,
     total_us: u128,
 }
@@ -84,6 +84,8 @@ struct Execution {
 #[derive(Debug, Clone, Deserialize)]
 struct SystemInfo {
     process_cpu_percent: Option<f64>,
+    host_logical_cpus: Option<usize>,
+    cpu_equivalent_cores: Option<f64>,
     process_rss_bytes: Option<u64>,
     active_guest_executions: usize,
     active_stores: usize,
@@ -312,7 +314,7 @@ fn render(snapshot: Option<&Snapshot>, error: Option<&str>, paused: bool) -> Res
         stdout,
         MoveTo(0, panel_row + 1),
         Print(format!(
-            "  services={}  queue={}  running={}/{}  completed={}  failed={}  peak={}  grid={:.0}%",
+            "  services={}  queue={}  running={}/{}  completed={}  failed={}  peak-lanes={}  grid={:.0}%",
             snapshot
                 .services
                 .iter()
@@ -323,13 +325,20 @@ fn render(snapshot: Option<&Snapshot>, error: Option<&str>, paused: bool) -> Res
             snapshot.grid.lane_count,
             snapshot.grid.completed,
             snapshot.grid.failed,
-            snapshot.grid.peak_active,
+            snapshot.grid.peak_active_lanes,
             snapshot.grid.utilization * 100.0
         )),
         MoveTo(0, panel_row + 2),
         Print(format!(
-            "  CPU={}  RSS={}  guest={}  stores={}  HOT={}  WARM={}",
-            format_percent(snapshot.system.process_cpu_percent),
+            "  Process CPU={}  host-cpus={}  RSS={}  guest={}  stores={}  HOT={}  WARM={}",
+            format_percent(
+                snapshot.system.process_cpu_percent,
+                snapshot.system.cpu_equivalent_cores,
+            ),
+            snapshot
+                .system
+                .host_logical_cpus
+                .map_or_else(|| "n/a".to_owned(), |value| value.to_string()),
             format_bytes(snapshot.system.process_rss_bytes),
             snapshot.system.active_guest_executions,
             snapshot.system.active_stores,
@@ -371,13 +380,13 @@ fn render(snapshot: Option<&Snapshot>, error: Option<&str>, paused: bool) -> Res
             MoveTo(0, detail_row),
             SetForegroundColor(Color::DarkGrey),
             Print(format!(
-                "DETAIL latest={} req={} service={} lane={} queue={}us gap={}us guest={}us total={}us",
+                "DETAIL latest={} req={} service={} lane={} queue-wait={}us dispatch-gap={}us guest={}us total={}us",
                 latest.execution_id,
                 latest.request_id,
                 latest.service_id,
                 latest.lane_id + 1,
                 latest.queue_wait_us,
-                latest.scheduler_gap_us,
+                latest.dispatch_gap_us,
                 latest.guest_execution_us,
                 latest.total_us
             )),
@@ -416,8 +425,12 @@ fn readiness_color(readiness: &str) -> Color {
     }
 }
 
-fn format_percent(value: Option<f64>) -> String {
-    value.map_or_else(|| "n/a".to_owned(), |value| format!("{value:.1}%"))
+fn format_percent(value: Option<f64>, equivalent_cores: Option<f64>) -> String {
+    match (value, equivalent_cores) {
+        (Some(value), Some(cores)) => format!("{value:.1}% (~{cores:.1} logical CPUs)"),
+        (Some(value), None) => format!("{value:.1}% (equivalent cores n/a)"),
+        _ => "n/a".to_owned(),
+    }
 }
 
 fn format_bytes(value: Option<u64>) -> String {
@@ -429,7 +442,7 @@ fn format_bytes(value: Option<u64>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_bytes, short_id};
+    use super::{format_bytes, format_percent, short_id};
 
     #[test]
     fn execution_ids_are_compact_for_the_flow() {
@@ -439,5 +452,14 @@ mod tests {
     #[test]
     fn missing_memory_is_explicit() {
         assert_eq!(format_bytes(None), "n/a");
+    }
+
+    #[test]
+    fn cpu_is_not_capped_at_one_hundred_percent() {
+        assert_eq!(
+            format_percent(Some(801.8), Some(8.018)),
+            "801.8% (~8.0 logical CPUs)"
+        );
+        assert_eq!(format_percent(None, Some(8.0)), "n/a");
     }
 }

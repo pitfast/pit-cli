@@ -43,6 +43,11 @@ BukuWarung-ready talk track are documented in
 loopback PitLane snapshot at `/v1/cockpit/snapshot`; it has no deployment or
 rollback controls.
 
+Pit Web is the separate local, read-only management console for applications,
+releases, logical routes, Paddock artifacts/objects, Circuit/Garages, and safe
+system facts. Run `pit web` to activate the bundled Vite static-web WASI app
+through the normal PitFast path; see [`docs/pit-web.md`](docs/pit-web.md).
+
 pit is the PitFast developer CLI. It is a thin composition layer:
 
 `pit call pit://service/path` sends a logical HTTP request to the local PitLane

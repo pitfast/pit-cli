@@ -243,13 +243,16 @@ async fn ensure_bundled_pit_lane(
         return Ok(());
     }
     let executable = std::env::current_exe()?;
-    let Some(bin_dir) = executable.parent() else {
+    let bundled_candidate = executable.parent().map(|dir| dir.join("pit-lane"));
+    let source_checkout_candidate =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../pit-lane/target/release/pit-lane");
+    let Some(pit_lane) = [bundled_candidate, Some(source_checkout_candidate)]
+        .into_iter()
+        .flatten()
+        .find(|path| path.is_file())
+    else {
         return Ok(());
     };
-    let pit_lane = bin_dir.join("pit-lane");
-    if !pit_lane.is_file() {
-        return Ok(());
-    }
 
     let state_dir = std::env::var_os("XDG_STATE_HOME")
         .map(std::path::PathBuf::from)
