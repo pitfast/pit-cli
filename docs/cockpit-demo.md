@@ -133,6 +133,39 @@ logical service routing without service-owned ports, and measured scheduler /
 execution timings from this host. Do not claim zero RAM, universal framework
 support, or a production HA guarantee.
 
+## Combined Pit Web + programmable routing flow
+
+After the initial deployment, use the local route policy demo to make release
+selection visible without changing the Cockpit's execution-only role:
+
+```sh
+./scripts/demo-routing.sh
+./scripts/bench-routing.sh
+```
+
+The script creates two coherent `pitstop-demo` ApplicationReleases from the
+same fixture, then demonstrates stable, blue/green, deterministic 90/10
+canary, deterministic A/B, header override, safe GET shadow, and a stable
+reset. It prints real release responses returned through one PitLane listener.
+The benchmark writes external HTTP and captured internal execution timings to
+`artifacts/routing-bench/summary.{json,md}`.
+
+For the narrated product split:
+
+1. Run `pit web --no-open` and show the deployed application, release history,
+   logical routes, immutable artifacts, and local Circuit/Garage state.
+2. Run `pit expose local` to show that web, orders, users, and Pit Web share
+   one loopback listener.
+3. Open `pit cockpit`, verify zero running executions, and run
+   `./scripts/demo-burst.sh medium`.
+4. Watch lanes fill and executions exit, then return to Pit Web. The
+   application/release remains present while Cockpit returns to zero running
+   guest executions.
+
+PitLane chooses a coherent release from its local immutable route snapshot;
+Circuit chooses placement and PitBox schedules a Lane. No route command can
+inject an arbitrary artifact digest.
+
 ## Design-partner questions
 
 - Which short-lived business operations are currently over-provisioned because

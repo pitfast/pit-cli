@@ -55,6 +55,10 @@ struct Lane {
     state: String,
     execution_id: Option<String>,
     service_id: Option<String>,
+    release_id: Option<String>,
+    variant: Option<String>,
+    #[serde(default)]
+    shadow: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -73,6 +77,10 @@ struct Execution {
     request_id: String,
     execution_id: String,
     service_id: String,
+    release_id: Option<String>,
+    variant: Option<String>,
+    #[serde(default)]
+    shadow: bool,
     lane_id: usize,
     status: String,
     queue_wait_us: u128,
@@ -240,7 +248,15 @@ fn render(snapshot: Option<&Snapshot>, error: Option<&str>, paused: bool) -> Res
                 stdout,
                 SetBackgroundColor(Color::DarkRed),
                 SetForegroundColor(Color::White),
-                Print(format!("[L{:02} RUN]", lane.lane_id + 1)),
+                Print(format!(
+                    "[L{:02} {} {}]",
+                    lane.lane_id + 1,
+                    lane.release_id
+                        .as_deref()
+                        .map(short_id)
+                        .unwrap_or_else(|| "RUN".to_owned()),
+                    lane.variant.as_deref().unwrap_or("active")
+                )),
                 ResetColor,
                 Print(" ")
             )?;
@@ -291,11 +307,16 @@ fn render(snapshot: Option<&Snapshot>, error: Option<&str>, paused: bool) -> Res
                     Color::DarkGrey
                 }),
                 Print(format!(
-                    "  L{:02} {:<7} {:<12} {:<7}",
+                    "  L{:02} {:<7} {:<12} {:<7} {:<10}{}",
                     lane.lane_id + 1,
                     lane.state.to_uppercase(),
                     service,
-                    execution
+                    execution,
+                    lane.release_id
+                        .as_deref()
+                        .map(short_id)
+                        .unwrap_or_else(|| "-".to_owned()),
+                    if lane.shadow { " shadow" } else { "" }
                 )),
                 ResetColor
             )?;
@@ -380,10 +401,13 @@ fn render(snapshot: Option<&Snapshot>, error: Option<&str>, paused: bool) -> Res
             MoveTo(0, detail_row),
             SetForegroundColor(Color::DarkGrey),
             Print(format!(
-                "DETAIL latest={} req={} service={} lane={} queue-wait={}us dispatch-gap={}us guest={}us total={}us",
+                "DETAIL latest={} req={} service={} release={} variant={}{} lane={} queue-wait={}us dispatch-gap={}us guest={}us total={}us",
                 latest.execution_id,
                 latest.request_id,
                 latest.service_id,
+                latest.release_id.as_deref().unwrap_or("n/a"),
+                latest.variant.as_deref().unwrap_or("stable"),
+                if latest.shadow { " shadow" } else { "" },
                 latest.lane_id + 1,
                 latest.queue_wait_us,
                 latest.dispatch_gap_us,

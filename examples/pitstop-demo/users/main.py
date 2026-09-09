@@ -1,7 +1,7 @@
 async def app(scope, receive, send):
     path = scope.get("path", "/")
     if path == "/users/health":
-        status, body = 200, b'{"service":"users","language":"python-asgi","status":"ready"}'
+        status, body = 200, b'{"service":"users","language":"python-asgi","release":"blue","status":"ready"}'
     elif path == "/users/language":
         status, body = 200, b"python-asgi"
     elif path == "/users/echo":

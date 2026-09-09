@@ -38,7 +38,8 @@ Docker dependency, dedicated app port, or replica.
 - Overview: local summary and the Pit Web/Cockpit boundary.
 - Applications: active application identity, services, and routes.
 - Releases: immutable ApplicationRelease history and active generation.
-- Routes: logical PitLane path-to-ServiceId mappings.
+- Routes: logical PitLane Host + Path selectors, release policies, stable and
+  candidate release IDs, weights, stickiness headers, and shadow status.
 - Paddock: artifact identities, configured object namespaces/objects, and
   backend capabilities when a grant is attached.
 - Circuit: Garage inventory and capacity when Circuit is configured.
@@ -61,6 +62,11 @@ Pit Web manages/inspects durable state. Cockpit observes queue, lanes,
 executions, timing, readiness, and CPU/RSS. Pit Web has no deploy, rollback,
 delete, ref-move, GC, or topology mutation controls in v0.1; use the CLI for
 mutations.
+
+Routing policy changes are also CLI-owned in this alpha. Use `pit route list`
+and the `pit route stable`, `blue-green`, `canary`, `ab`, `header`, `shadow`,
+and `clear` commands to operate the existing PitLane authority; Pit Web only
+displays the resulting RouteSnapshot.
 
 For the combined demo:
 

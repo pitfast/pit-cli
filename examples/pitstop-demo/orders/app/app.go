@@ -4,13 +4,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 var Handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/orders/health":
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"service":"orders","language":"go-net-http","status":"ready"}`)
+		_, _ = io.WriteString(w, `{"service":"orders","language":"go-net-http","release":"blue","status":"ready"}`)
+	case "/orders/slow":
+		time.Sleep(250 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"service":"orders","release":"blue","status":"slow-complete"}`)
 	case "/orders/language":
 		_, _ = io.WriteString(w, "go-net-http")
 	case "/orders/echo":

@@ -100,6 +100,16 @@ enum Command {
     },
     /// Write a redacted, shareable support diagnostic JSON document.
     Diagnostics(commands::diagnostics::DiagnosticsArgs),
+    /// Inspect and configure local release-aware PitLane routing.
+    Route {
+        #[command(subcommand)]
+        command: commands::route::RouteCommand,
+    },
+    /// Show local PitLane exposure and optional Cloudflare connector status.
+    Expose {
+        #[command(subcommand)]
+        command: commands::expose::ExposeCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -206,5 +216,7 @@ async fn main() -> Result<()> {
             GarageCommand::Inspect(args) => commands::circuit::inspect(args).await,
         },
         Command::Diagnostics(args) => commands::diagnostics::run(args),
+        Command::Route { command } => commands::route::run(command).await,
+        Command::Expose { command } => commands::expose::run(command).await,
     }
 }
