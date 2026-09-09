@@ -107,7 +107,7 @@ def scenario(name, args, count, headers):
             "guest_ms": {"p50": internal_percentile("guest_execution_us", 50), "p95": internal_percentile("guest_execution_us", 95), "p99": internal_percentile("guest_execution_us", 99)},
             "internal_total_ms": {"p50": internal_percentile("total_us", 50), "p95": internal_percentile("total_us", 95), "p99": internal_percentile("total_us", 99)},
             "peak_active_lanes": grid.get("peak_active_lanes"),
-            "completed_delta": len(executions),
+            "internal_sample_count": len(executions),
             "cpu_percent": system.get("process_cpu_percent"),
             "cpu_equivalent_cores": system.get("cpu_equivalent_cores"),
             "rss_bytes": system.get("process_rss_bytes"),
@@ -126,7 +126,7 @@ report = {
     "host": {"os": platform.platform(), "machine": platform.machine(), "python": platform.python_version()},
     "release_ids": {"blue": blue, "green": green},
     "scenarios": results,
-    "notes": ["External HTTP is measured by urllib around each request.", "Internal timing fields are only reported when present in the control snapshot; unavailable values remain null."],
+    "notes": ["External HTTP is measured by urllib around each request.", "Internal timing fields are only reported for newly observed entries in the bounded Cockpit recent-execution ring; unavailable values remain null."],
 }
 with open(os.path.join(out, "summary.json"), "w", encoding="utf-8") as handle:
     json.dump(report, handle, indent=2)
