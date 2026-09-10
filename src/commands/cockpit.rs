@@ -7,9 +7,7 @@ use clap::Args;
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::execute;
-use crossterm::style::{
-    Attribute, Color, Print, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
-};
+use crossterm::style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor};
 use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use serde::Deserialize;
 use tokio::time::sleep;
@@ -224,104 +222,113 @@ fn render(snapshot: Option<&Snapshot>, error: Option<&str>, paused: bool) -> Res
     };
 
     let mut row = 3u16;
-    execute!(
-        stdout,
-        MoveTo(0, row),
-        SetForegroundColor(Color::Cyan),
-        Print("QUEUE"),
-        ResetColor,
-        Print("  ")
+    let queue_count = snapshot.grid.queue_depth;
+    print_box_header(
+        &mut stdout,
+        row,
+        width,
+        "PIT ENTRY QUEUE",
+        &format!("[WAITING {queue_count:02}]"),
+        Color::Yellow,
     )?;
-    let queue_tokens = snapshot.grid.queue_depth.min(12);
-    for index in 0..queue_tokens {
-        execute!(
-            stdout,
-            SetForegroundColor(Color::Yellow),
-            Print(format!("[Q{:02}] ", index + 1)),
-            ResetColor
-        )?;
-    }
-    execute!(stdout, Print(" ── PIT ENTRY ──> "))?;
+    row += 1;
+    let queue_text = if queue_count == 0 {
+        "EMPTY - no work waiting".to_owned()
+    } else {
+        (0..queue_count.min(8))
+            .map(|index| format!("[WAITING #{:02}]", index + 1))
+            .collect::<Vec<_>>()
+            .join("  ")
+    };
+    print_box_line(&mut stdout, row, width, &queue_text, Color::Yellow)?;
+    row += 1;
+    print_flow_arrow(&mut stdout, row, width, "PIT ENTRY", Color::Yellow)?;
+    row += 1;
+
+    print_box_header(
+        &mut stdout,
+        row,
+        width,
+        "ACTIVE EXECUTIONS",
+        &format!(
+            "[RUNNING {}/{}]",
+            snapshot.grid.running, snapshot.grid.lane_count
+        ),
+        Color::Red,
+    )?;
+    row += 1;
     for lane in &snapshot.grid.lanes {
-        if lane.state == "running" {
-            execute!(
-                stdout,
-                SetBackgroundColor(Color::DarkRed),
-                SetForegroundColor(Color::White),
-                Print(format!(
-                    "[L{:02} {} {}]",
-                    lane.lane_id + 1,
-                    lane.release_id
-                        .as_deref()
-                        .map(short_id)
-                        .unwrap_or_else(|| "RUN".to_owned()),
-                    lane.variant.as_deref().unwrap_or("active")
-                )),
-                ResetColor,
-                Print(" ")
-            )?;
+        let service = lane.service_id.as_deref().unwrap_or("service?");
+        let execution = lane
+            .execution_id
+            .as_deref()
+            .map(short_id)
+            .unwrap_or_else(|| "-".to_owned());
+        let release = lane
+            .release_id
+            .as_deref()
+            .map(short_id)
+            .unwrap_or_else(|| "-".to_owned());
+        let variant = lane.variant.as_deref().unwrap_or("-");
+        let text = if lane.state == "running" {
+            format!(
+                "LANE {:02}  [RUNNING]  {service}  exec={execution}  release={release}  {variant}{}",
+                lane.lane_id + 1,
+                if lane.shadow { "  SHADOW" } else { "" }
+            )
         } else {
-            execute!(
-                stdout,
-                SetForegroundColor(Color::DarkGrey),
-                Print(format!("[L{:02}  ·  ] ", lane.lane_id + 1)),
-                ResetColor
-            )?;
-        }
-    }
-    execute!(stdout, Print(" ──> EXIT "))?;
-    for execution in snapshot
-        .recent_executions
-        .iter()
-        .rev()
-        .take(MAX_EXIT_TOKENS)
-    {
-        execute!(
-            stdout,
-            SetForegroundColor(if execution.status == "completed" {
-                Color::Green
-            } else {
+            format!("LANE {:02}  [FREE]     no execution", lane.lane_id + 1)
+        };
+        row += 1;
+        print_box_line(
+            &mut stdout,
+            row,
+            width,
+            &text,
+            if lane.state == "running" {
                 Color::Red
-            }),
-            Print(format!("✓{} ", short_id(&execution.execution_id))),
-            ResetColor
+            } else {
+                Color::DarkGrey
+            },
         )?;
     }
-    row += 2;
-    execute!(stdout, MoveTo(0, row), Print("LANES"))?;
-    for lane_row in snapshot.grid.lanes.chunks(4) {
-        row += 1;
-        execute!(stdout, MoveTo(0, row))?;
-        for lane in lane_row {
-            let service = lane.service_id.as_deref().unwrap_or("-");
-            let execution = lane
-                .execution_id
-                .as_deref()
-                .map(short_id)
-                .unwrap_or_else(|| "-".to_owned());
-            execute!(
-                stdout,
-                SetForegroundColor(if lane.state == "running" {
-                    Color::Red
+    row += 1;
+    print_flow_arrow(&mut stdout, row, width, "LANES", Color::Red)?;
+    row += 1;
+
+    print_box_header(
+        &mut stdout,
+        row,
+        width,
+        "EXIT / COMPLETED",
+        "[RECENT]",
+        Color::Green,
+    )?;
+    row += 1;
+    let exit_text = if snapshot.recent_executions.is_empty() {
+        "EMPTY - no completed executions yet".to_owned()
+    } else {
+        snapshot
+            .recent_executions
+            .iter()
+            .rev()
+            .take(MAX_EXIT_TOKENS)
+            .map(|execution| {
+                let marker = if execution.status == "completed" {
+                    "EXIT"
                 } else {
-                    Color::DarkGrey
-                }),
-                Print(format!(
-                    "  L{:02} {:<7} {:<12} {:<7} {:<10}{}",
-                    lane.lane_id + 1,
-                    lane.state.to_uppercase(),
-                    service,
-                    execution,
-                    lane.release_id
-                        .as_deref()
-                        .map(short_id)
-                        .unwrap_or_else(|| "-".to_owned()),
-                    if lane.shadow { " shadow" } else { "" }
-                )),
-                ResetColor
-            )?;
-        }
-    }
+                    "FAILED"
+                };
+                format!(
+                    "[{marker}] {} · exec={}",
+                    execution.service_id,
+                    short_id(&execution.execution_id)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("  ")
+    };
+    print_box_line(&mut stdout, row, width, &exit_text, Color::Green)?;
 
     let panel_row = height.saturating_sub(12).max(row + 2);
     execute!(
@@ -430,6 +437,84 @@ fn render(snapshot: Option<&Snapshot>, error: Option<&str>, paused: bool) -> Res
     Ok(())
 }
 
+fn print_box_header(
+    stdout: &mut io::Stdout,
+    row: u16,
+    width: u16,
+    title: &str,
+    detail: &str,
+    color: Color,
+) -> Result<()> {
+    let prefix = format!("+-- {title} {detail} ");
+    let dashes = (width as usize)
+        .saturating_sub(prefix.chars().count())
+        .saturating_sub(1);
+    execute!(
+        stdout,
+        MoveTo(0, row),
+        SetForegroundColor(color),
+        SetAttribute(Attribute::Bold),
+        Print(prefix),
+        Print("-".repeat(dashes)),
+        Print("+"),
+        SetAttribute(Attribute::Reset),
+        ResetColor
+    )?;
+    Ok(())
+}
+
+fn print_box_line(
+    stdout: &mut io::Stdout,
+    row: u16,
+    width: u16,
+    text: &str,
+    color: Color,
+) -> Result<()> {
+    let inner_width = (width as usize).saturating_sub(4);
+    let text = fit_text(text, inner_width);
+    execute!(
+        stdout,
+        MoveTo(0, row),
+        SetForegroundColor(color),
+        Print(format!("| {:<inner_width$} |", text)),
+        ResetColor
+    )?;
+    Ok(())
+}
+
+fn print_flow_arrow(
+    stdout: &mut io::Stdout,
+    row: u16,
+    width: u16,
+    label: &str,
+    color: Color,
+) -> Result<()> {
+    let text = format!("                         |  {label}  v");
+    execute!(
+        stdout,
+        MoveTo(0, row),
+        SetForegroundColor(color),
+        Print(fit_text(&text, width as usize)),
+        ResetColor
+    )?;
+    Ok(())
+}
+
+fn fit_text(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_owned();
+    }
+    if max_chars == 0 {
+        return String::new();
+    }
+    if max_chars == 1 {
+        return "…".to_owned();
+    }
+    let mut result = text.chars().take(max_chars - 1).collect::<String>();
+    result.push('…');
+    result
+}
+
 fn short_id(value: &str) -> String {
     value
         .chars()
@@ -466,7 +551,7 @@ fn format_bytes(value: Option<u64>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_bytes, format_percent, short_id};
+    use super::{fit_text, format_bytes, format_percent, short_id};
 
     #[test]
     fn execution_ids_are_compact_for_the_flow() {
@@ -485,5 +570,12 @@ mod tests {
             "801.8% (~8.0 logical CPUs)"
         );
         assert_eq!(format_percent(None, Some(8.0)), "n/a");
+    }
+
+    #[test]
+    fn flow_labels_are_bounded_for_small_terminals() {
+        assert_eq!(fit_text("LANE 01 [RUNNING] orders", 10), "LANE 01 […");
+        assert_eq!(fit_text("short", 10), "short");
+        assert_eq!(fit_text("anything", 0), "");
     }
 }
