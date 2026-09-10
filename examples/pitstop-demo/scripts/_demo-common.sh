@@ -16,8 +16,12 @@ demo_control="${PITFAST_CONTROL_ENDPOINT:-http://127.0.0.1:7081}"
 demo_host="${PITFAST_DEMO_HOST:-demo.localhost}"
 demo_listen_addr="${PITFAST_DEMO_LISTEN_ADDR:-0.0.0.0:7080}"
 demo_control_listen_addr="${PITFAST_DEMO_CONTROL_LISTEN_ADDR:-0.0.0.0:7081}"
-demo_public_host="${PITFAST_DEMO_PUBLIC_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
-demo_public_host="${demo_public_host:-127.0.0.1}"
+if [ -n "${PITFAST_DEMO_PUBLIC_HOST:-}" ]; then
+  demo_public_host="$PITFAST_DEMO_PUBLIC_HOST"
+else
+  demo_public_host="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  demo_public_host="${demo_public_host:-127.0.0.1}"
+fi
 demo_database_url="${PITFAST_DEMO_DATABASE_URL:-postgresql://pitfast@127.0.0.1:5432/pitfast_demo}"
 
 export PIT_DEPLOYMENT_STATE_DIR="${PIT_DEPLOYMENT_STATE_DIR:-$demo_state/deployments}"
