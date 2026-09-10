@@ -18,11 +18,13 @@ demo_listen_addr="${PITFAST_DEMO_LISTEN_ADDR:-0.0.0.0:7080}"
 demo_control_listen_addr="${PITFAST_DEMO_CONTROL_LISTEN_ADDR:-0.0.0.0:7081}"
 demo_public_host="${PITFAST_DEMO_PUBLIC_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
 demo_public_host="${demo_public_host:-127.0.0.1}"
+demo_database_url="${PITFAST_DEMO_DATABASE_URL:-postgresql://pitfast@127.0.0.1:5432/pitfast_demo}"
 
 export PIT_DEPLOYMENT_STATE_DIR="${PIT_DEPLOYMENT_STATE_DIR:-$demo_state/deployments}"
 export PIT_ARTIFACT_STORE_ROOT="${PIT_ARTIFACT_STORE_ROOT:-$demo_state/artifacts}"
 export PITFAST_HTTP_ENDPOINT="$demo_http"
 export PITFAST_CONTROL_ENDPOINT="$demo_control"
+export MAIN_DATABASE_URL="$demo_database_url"
 
 say() { printf '%s\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }

@@ -24,7 +24,7 @@ for repo in pit-box pit-crew pit-cli pit-lane pit-paddock pit-circuit; do
     fail_check "missing repository $repo"
   fi
 done
-for command in cargo go python3 node npm curl; do check_command "$command"; done
+for command in cargo go python3 node npm curl docker; do check_command "$command"; done
 if [ -f "$pit_bin" ]; then pass_check "pit binary: $pit_bin"; else fail_check "missing pit binary: $pit_bin"; fi
 if [ -f "$lane_bin" ]; then pass_check "pit-lane binary: $lane_bin"; else fail_check "missing pit-lane binary: $lane_bin"; fi
 mkdir -p "$demo_logs" "$PIT_DEPLOYMENT_STATE_DIR" "$PIT_ARTIFACT_STORE_ROOT"
@@ -35,6 +35,14 @@ case "$demo_control_listen_addr" in
   127.*|\[::1\]:*|::1:*) ;;
   *) warn_check "public control API enabled; use only on a trusted isolated network" ;;
 esac
+if command -v docker >/dev/null 2>&1; then
+  if docker inspect "${PITFAST_DEMO_POSTGRES_CONTAINER:-pitfast-postgres-demo}" >/dev/null 2>&1 \
+    && [ "$(docker inspect -f '{{.State.Running}}' "${PITFAST_DEMO_POSTGRES_CONTAINER:-pitfast-postgres-demo}")" = "true" ]; then
+    pass_check "demo PostgreSQL container is running"
+  else
+    fail_check "demo PostgreSQL container is not running; run scripts/demo-postgres.sh"
+  fi
+fi
 if command -v df >/dev/null 2>&1; then
   free_kib="$(df -Pk "$demo_root" | awk 'NR==2 {print $4}')"
   if [ "${free_kib:-0}" -ge 1048576 ]; then pass_check "disk space >= 1 GiB"; else warn_check "less than 1 GiB free on demo filesystem"; fi

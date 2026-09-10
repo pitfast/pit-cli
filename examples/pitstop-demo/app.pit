@@ -12,11 +12,18 @@ language = "go"
 interface = "net-http"
 entry = "app:Handler"
 
+[services.orders.resources]
+DATABASE_URL = "main"
+
 [services.users]
 build = "users"
 language = "python"
 interface = "asgi"
 entry = "main:app"
+
+[resources.main]
+type = "postgres"
+from = "MAIN_DATABASE_URL"
 
 [routes]
 "/" = "web"

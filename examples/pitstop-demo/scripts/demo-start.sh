@@ -22,12 +22,14 @@ else
     --control-listen "$demo_control_listen_addr"
     --state-dir "$PIT_DEPLOYMENT_STATE_DIR"
     --artifact-store "$PIT_ARTIFACT_STORE_ROOT"
+    --resource main=MAIN_DATABASE_URL
+    --bind orders:DATABASE_URL=main
   )
   case "$demo_control_listen_addr" in
     127.*|\[::1\]:*|::1:*) ;;
     *) lane_args+=(--allow-public-control) ;;
   esac
-  setsid "$lane_bin" "${lane_args[@]}" \
+  MAIN_DATABASE_URL="$demo_database_url" setsid "$lane_bin" "${lane_args[@]}" \
     >"$demo_logs/pit-lane.log" 2>&1 </dev/null &
   lane_pid=$!
   printf '%s\n' "$lane_pid" > "$demo_pid_file"
