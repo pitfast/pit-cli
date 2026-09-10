@@ -17,11 +17,17 @@ else
   printf 'pitfast-demo\n' > "$demo_lock_file"
   # A new session keeps the demo-owned infrastructure alive after this
   # helper exits from an ordinary terminal or CI command runner.
-  setsid "$lane_bin" \
-    --listen 127.0.0.1:7080 \
-    --control-listen 127.0.0.1:7081 \
-    --state-dir "$PIT_DEPLOYMENT_STATE_DIR" \
-    --artifact-store "$PIT_ARTIFACT_STORE_ROOT" \
+  lane_args=(
+    --listen "$demo_listen_addr"
+    --control-listen "$demo_control_listen_addr"
+    --state-dir "$PIT_DEPLOYMENT_STATE_DIR"
+    --artifact-store "$PIT_ARTIFACT_STORE_ROOT"
+  )
+  case "$demo_control_listen_addr" in
+    127.*|\[::1\]:*|::1:*) ;;
+    *) lane_args+=(--allow-public-control) ;;
+  esac
+  setsid "$lane_bin" "${lane_args[@]}" \
     >"$demo_logs/pit-lane.log" 2>&1 </dev/null &
   lane_pid=$!
   printf '%s\n' "$lane_pid" > "$demo_pid_file"
@@ -39,5 +45,9 @@ wait_http "$demo_http/__pit/" 30 || fail "Pit Web did not become reachable"
 wait_http "$demo_control/v1/management/snapshot" 10 || fail "management API did not become reachable"
 say "PitFast demo ready"
 say "Pit Web: $demo_http/__pit/"
+say "LAN Pit Web: http://$demo_public_host:7080/__pit/"
 say "PitLane: $demo_http"
+say "LAN PitLane: http://$demo_public_host:7080"
+say "Public demo mode: HTTP and control listeners bound to configured addresses"
+say "Only use this mode on a trusted network; control API includes mutations"
 say "Logs: $demo_logs"

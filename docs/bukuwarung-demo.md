@@ -32,6 +32,13 @@ Recommended layout:
 
 No tmux session is required.
 
+The demo startup wrapper binds HTTP and control to `0.0.0.0` so a browser on
+the same trusted LAN can use the LAN address printed by `demo-start.sh`, for
+example `http://192.168.x.x:7080/__pit/`. The control API is exposed on port
+7081 in this explicit demo mode and includes mutation endpoints; use this only
+on a trusted isolated network. Standalone PitLane remains loopback-only unless
+`--allow-public-control` is explicitly supplied.
+
 ## 15–20 minute flow
 
 1. Ask how many services, runtimes, minimum replicas, and bursty workloads

@@ -29,6 +29,12 @@ if [ -f "$pit_bin" ]; then pass_check "pit binary: $pit_bin"; else fail_check "m
 if [ -f "$lane_bin" ]; then pass_check "pit-lane binary: $lane_bin"; else fail_check "missing pit-lane binary: $lane_bin"; fi
 mkdir -p "$demo_logs" "$PIT_DEPLOYMENT_STATE_DIR" "$PIT_ARTIFACT_STORE_ROOT"
 [ -w "$demo_state" ] && pass_check "demo state writable: $demo_state" || fail_check "demo state is not writable: $demo_state"
+pass_check "HTTP listener target: $demo_listen_addr"
+pass_check "control listener target: $demo_control_listen_addr"
+case "$demo_control_listen_addr" in
+  127.*|\[::1\]:*|::1:*) ;;
+  *) warn_check "public control API enabled; use only on a trusted isolated network" ;;
+esac
 if command -v df >/dev/null 2>&1; then
   free_kib="$(df -Pk "$demo_root" | awk 'NR==2 {print $4}')"
   if [ "${free_kib:-0}" -ge 1048576 ]; then pass_check "disk space >= 1 GiB"; else warn_check "less than 1 GiB free on demo filesystem"; fi

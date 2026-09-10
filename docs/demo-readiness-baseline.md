@@ -65,3 +65,7 @@ Rust, Go, Python, Node/npm/pnpm, and Playwright's CLI are available. No system
 Chromium, Chrome, or Firefox executable was present at baseline; browser
 validation is therefore attempted user-locally and is reported as skipped or
 blocked if the required browser/runtime cannot be launched.
+
+The demo wrapper uses `0.0.0.0:7080` and `0.0.0.0:7081` for trusted-LAN
+demonstrations and passes `--allow-public-control`. The standalone PitLane
+default remains loopback-only.

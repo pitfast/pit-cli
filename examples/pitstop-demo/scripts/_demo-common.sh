@@ -14,6 +14,10 @@ demo_release_file="$demo_state/base-release"
 demo_http="${PITFAST_HTTP_ENDPOINT:-http://127.0.0.1:7080}"
 demo_control="${PITFAST_CONTROL_ENDPOINT:-http://127.0.0.1:7081}"
 demo_host="${PITFAST_DEMO_HOST:-demo.localhost}"
+demo_listen_addr="${PITFAST_DEMO_LISTEN_ADDR:-0.0.0.0:7080}"
+demo_control_listen_addr="${PITFAST_DEMO_CONTROL_LISTEN_ADDR:-0.0.0.0:7081}"
+demo_public_host="${PITFAST_DEMO_PUBLIC_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
+demo_public_host="${demo_public_host:-127.0.0.1}"
 
 export PIT_DEPLOYMENT_STATE_DIR="${PIT_DEPLOYMENT_STATE_DIR:-$demo_state/deployments}"
 export PIT_ARTIFACT_STORE_ROOT="${PIT_ARTIFACT_STORE_ROOT:-$demo_state/artifacts}"
@@ -46,7 +50,7 @@ owned_lane_pid() {
   [ -r "/proc/$pid/cmdline" ] || return 1
   command_line="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
   case "$command_line" in
-    *"$lane_bin"*"--listen 127.0.0.1:7080"*"--control-listen 127.0.0.1:7081"*)
+    *"$lane_bin"*"--listen $demo_listen_addr"*"--control-listen $demo_control_listen_addr"*)
       printf '%s\n' "$pid"; return 0 ;;
   esac
   return 1

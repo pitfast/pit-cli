@@ -25,6 +25,10 @@ HTML. Run `./scripts/demo-start.sh` again to re-activate the bundled static
 application. If the artifact is missing, run `./scripts/demo-build.sh` before
 starting; do not build during the meeting.
 
+For a LAN browser, use the `LAN Pit Web` URL printed by `demo-start.sh`. Do
+not expose the control port on an untrusted network; public demo mode is an
+explicit convenience mode, not an authentication layer.
+
 ## Management or Cockpit API fails
 
 Run:
